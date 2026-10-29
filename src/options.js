@@ -361,6 +361,55 @@ async function renderUsage() {
 
   const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, COLORS.length);
   renderPie(entries);
+  renderDailyUsageGraph(usage);
+}
+
+function renderDailyUsageGraph(usage) {
+  const graph = document.getElementById("dailyUsageGraph");
+  if (!graph) return;
+
+  const days = getLastSevenDateKeys();
+  const values = days.map((day) => {
+    const dayData = usage[day] || {};
+    return Object.values(dayData).reduce((sum, ms) => sum + (Number(ms) || 0), 0);
+  });
+  const total = values.reduce((sum, v) => sum + v, 0);
+  const totalEl = document.getElementById("dailyUsageTotal");
+  if (totalEl) totalEl.textContent = `${formatDuration(total)} total`;
+
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => {
+    const x = 8 + index * 14;
+    const y = 82 - (value / max) * 66;
+    return `${x},${y}`;
+  });
+
+  graph.replaceChildren();
+  const svg = createSvgElement("svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("aria-hidden", "true");
+
+  const polyline = createSvgElement("polyline");
+  polyline.setAttribute("points", points.join(" "));
+  polyline.setAttribute("class", "focus-line");
+  svg.append(polyline);
+
+  points.forEach((point, index) => {
+    const [x, y] = point.split(",");
+    const circle = createSvgElement("circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", "2.4");
+    circle.setAttribute("class", "focus-dot");
+    svg.append(circle);
+
+    const label = document.createElement("span");
+    label.textContent = `${days[index].slice(5)} ${formatDuration(values[index])}`;
+    label.className = "focus-graph-label";
+    graph.append(label);
+  });
+
+  graph.prepend(svg);
 }
 
 function syncCustomRangeVisibility() {

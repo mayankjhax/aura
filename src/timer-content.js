@@ -263,7 +263,7 @@
     breakBtn.className = "fg-reminder-btn fg-btn-primary";
     breakBtn.textContent = "Take a break";
     breakBtn.addEventListener("click", () => {
-      dismissReminder(reminder.ruleId);
+      takeBreak(reminder.ruleId);
     });
 
     const resumeBtn = document.createElement("button");
@@ -315,6 +315,16 @@
     try {
       await chrome.runtime.sendMessage({
         type: "FOCUS_GUARD_DISMISS_REMINDER",
+        ruleId,
+      });
+    } catch {}
+  }
+
+  async function takeBreak(ruleId) {
+    hideReminderPopup();
+    try {
+      await chrome.runtime.sendMessage({
+        type: "FOCUS_GUARD_TAKE_BREAK",
         ruleId,
       });
     } catch {}

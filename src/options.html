@@ -183,6 +183,14 @@
           </div>
           <p id="usageHint" class="usage-hint">Hover over a slice to see the website and time spent.</p>
         </div>
+
+        <div class="daily-usage-section">
+          <div class="daily-usage-heading">
+            <h3>Daily browsing time (past 7 days)</h3>
+            <span id="dailyUsageTotal" class="daily-usage-total">0s total</span>
+          </div>
+          <div id="dailyUsageGraph" class="focus-graph" aria-label="Daily usage this week"></div>
+        </div>
       </section>
 
       <section class="panel debug-panel">
@@ -216,7 +224,14 @@
 
     <template id="tabRuleTemplate">
       <form class="rule-card">
-        <input name="name" placeholder="Name, e.g., Social sites" aria-label="Name" required>
+        <div class="rule-header-row">
+          <label class="toggle-switch" title="Toggle enabled/disabled">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+          </label>
+          <input name="name" placeholder="Name, e.g., Social sites" aria-label="Name" required>
+          <button class="danger remove-button" type="button" data-remove>Remove</button>
+        </div>
         <textarea name="patterns" placeholder="Sites, e.g., x.com, www.google.com/search, *.youtube.com" aria-label="Sites" required></textarea>
         <div class="split-fields">
           <label>
@@ -231,56 +246,46 @@
             </select>
           </label>
         </div>
-        <div class="rule-actions">
-          <label class="toggle-switch">
-            <input name="enabled" type="checkbox" checked>
-            <span class="toggle-track" aria-hidden="true"></span>
-            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
-          </label>
-          <button class="danger" type="button" data-remove>Remove</button>
-        </div>
       </form>
     </template>
 
     <template id="timeRuleTemplate">
       <form class="rule-card">
-        <input name="name" placeholder="Name, e.g., Entertainment" aria-label="Name" required>
-        <textarea name="patterns" placeholder="Sites, e.g., www.youtube.com, www.google.com/search" aria-label="Sites" required></textarea>
-        <div class="split-fields">
-          <label>
-            Minutes
-            <input name="minutes" type="number" min="1" value="30" required>
-          </label>
-          <label>
-            Period
-            <select name="period">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </label>
-        </div>
-        <label>
-          Apply time limit
-          <select name="scope">
-            <option value="group">For whole group</option>
-            <option value="each">For each website</option>
-          </select>
-        </label>
-        <div class="rule-actions">
-          <label class="toggle-switch">
+        <div class="rule-header-row">
+          <label class="toggle-switch" title="Toggle enabled/disabled">
             <input name="enabled" type="checkbox" checked>
             <span class="toggle-track" aria-hidden="true"></span>
-            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
           </label>
-          <button class="danger" type="button" data-remove>Remove</button>
+          <input name="name" placeholder="Name, e.g., Entertainment" aria-label="Name" required>
+          <button class="danger remove-button" type="button" data-remove>Remove</button>
+        </div>
+        <textarea name="patterns" placeholder="Sites, e.g., www.youtube.com, www.google.com/search" aria-label="Sites" required></textarea>
+        <div class="inline-time-limit">
+          <input name="minutes" type="number" min="1" value="30" aria-label="Minutes" required>
+          <span class="inline-label">minutes</span>
+          <select name="period" aria-label="Period">
+            <option value="daily">daily</option>
+            <option value="weekly">weekly</option>
+            <option value="monthly">monthly</option>
+          </select>
+          <select name="scope" aria-label="Scope">
+            <option value="each">for each website</option>
+            <option value="group">for whole group</option>
+          </select>
         </div>
       </form>
     </template>
 
     <template id="scheduleRuleTemplate">
       <form class="rule-card">
-        <input name="name" placeholder="Name, e.g., Study resources" aria-label="Name" required>
+        <div class="rule-header-row">
+          <label class="toggle-switch" title="Toggle enabled/disabled">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+          </label>
+          <input name="name" placeholder="Name, e.g., Study resources" aria-label="Name" required>
+          <button class="danger remove-button" type="button" data-remove>Remove</button>
+        </div>
         <textarea name="patterns" placeholder="Allowed sites, e.g., docs.google.com, *.coursera.org" aria-label="Allowed sites" required></textarea>
         <fieldset class="weekday-picker">
           <legend>Allowed weekdays</legend>
@@ -302,20 +307,19 @@
             <input name="endTime" type="time" value="17:00" required>
           </label>
         </div>
-        <div class="rule-actions">
-          <label class="toggle-switch">
-            <input name="enabled" type="checkbox" checked>
-            <span class="toggle-track" aria-hidden="true"></span>
-            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
-          </label>
-          <button class="danger" type="button" data-remove>Remove</button>
-        </div>
       </form>
     </template>
 
     <template id="reminderRuleTemplate">
       <form class="rule-card">
-        <input name="name" placeholder="Name, e.g., YouTube break" aria-label="Name" required>
+        <div class="rule-header-row">
+          <label class="toggle-switch" title="Toggle enabled/disabled">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+          </label>
+          <input name="name" placeholder="Name, e.g., YouTube break" aria-label="Name" required>
+          <button class="danger remove-button" type="button" data-remove>Remove</button>
+        </div>
         <textarea name="patterns" placeholder="Sites, e.g., *.youtube.com, netflix.com, twitch.tv" aria-label="Sites" required></textarea>
         <div class="split-fields">
           <label>
@@ -326,14 +330,6 @@
             Reminder message (optional)
             <input name="message" placeholder="Take a break from this site!" aria-label="Reminder message">
           </label>
-        </div>
-        <div class="rule-actions">
-          <label class="toggle-switch">
-            <input name="enabled" type="checkbox" checked>
-            <span class="toggle-track" aria-hidden="true"></span>
-            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
-          </label>
-          <button class="danger" type="button" data-remove>Remove</button>
         </div>
       </form>
     </template>

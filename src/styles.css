@@ -257,6 +257,61 @@ label {
   padding: 0.9rem;
 }
 
+.rule-header-row {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.rule-header-row input[name="name"] {
+  flex: 1;
+  margin-top: 0;
+}
+
+.rule-header-row .toggle-switch {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.rule-header-row .remove-button {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  white-space: nowrap;
+}
+
+.inline-time-limit {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.inline-time-limit input[name="minutes"] {
+  margin-top: 0;
+  text-align: center;
+  width: 5rem;
+}
+
+.inline-time-limit .inline-label {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.inline-time-limit select[name="period"] {
+  margin-top: 0;
+  min-width: 6.8rem;
+  width: auto;
+}
+
+.inline-time-limit select[name="scope"] {
+  flex: 1;
+  margin-top: 0;
+  min-width: 10.5rem;
+  width: auto;
+}
+
 .global-tab-limits {
   margin-bottom: 0.8rem;
 }
@@ -817,6 +872,32 @@ textarea.todo-edit-input {
   font-weight: 700;
   margin: 0;
   text-align: center;
+}
+
+.daily-usage-section {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  width: 100%;
+}
+
+.daily-usage-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.daily-usage-heading h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.daily-usage-total {
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .legend {

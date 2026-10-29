@@ -122,6 +122,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "FOCUS_GUARD_TAKE_BREAK") {
+    takeBreakAndCloseTabs(message.ruleId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
+
   if (message?.type === "FOCUS_GUARD_SNOOZE_REMINDER") {
     snoozeReminder(message.ruleId, message.minutes)
       .then(() => sendResponse({ ok: true }))
@@ -619,6 +626,23 @@ async function dismissReminder(ruleId) {
     reminderState[ruleId].lastTickAt = Date.now();
     delete reminderState[ruleId].snoozedUntil;
     await saveReminderState(reminderState);
+  }
+}
+
+async function takeBreakAndCloseTabs(ruleId) {
+  await dismissReminder(ruleId);
+
+  const settings = await getSettings();
+  const rule = (settings.reminders || []).find((candidate) => candidate.id === ruleId);
+  if (!rule || !normalizePatterns(rule.patterns).length) return;
+
+  const allTabs = await chrome.tabs.query({});
+  const tabsToClose = allTabs.filter(
+    (tab) => !isProtectedTab(tab) && urlMatchesPatterns(tab.url || "", rule.patterns)
+  );
+
+  for (const tab of tabsToClose) {
+    await safeRemoveTab(tab.id);
   }
 }
 
