@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Focus Guard Settings</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Focus Guard</p>
+        <h1>Reduce stimulation. Increase focus.</h1>
+        <p>Limit noisy tabs, cap time on distracting sites, and review where your attention went.</p>
+      </header>
+
+      <section class="panel settings-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Appearance</h2>
+            <p>Choose light, dark, or follow your system theme.</p>
+          </div>
+          <label class="compact-field">
+            Theme
+            <select id="themeMode" aria-label="Theme mode">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel focus-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Focus mode</h2>
+            <p>Block selected websites while focus mode is turned on.</p>
+          </div>
+          <label class="toggle-switch">
+            <input id="focusModeEnabled" type="checkbox">
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-text" data-enabled="On" data-disabled="Off"></span>
+          </label>
+        </div>
+        <textarea id="focusModePatterns" placeholder="Sites to block, e.g., x.com, reddit.com, *.youtube.com" aria-label="Focus mode blocked sites"></textarea>
+        <div class="focus-stats">
+          <div class="focus-total">
+            <span>Focused today</span>
+            <strong id="focusToday">0s</strong>
+          </div>
+          <div id="focusGraph" class="focus-graph" aria-label="Focus time this week"></div>
+        </div>
+      </section>
+
+      <section class="panel todo-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Tasks</h2>
+            <p>Capture the next small step and keep your focus loop visible.</p>
+          </div>
+          <button id="addTodo" type="button">Add</button>
+        </div>
+        <div id="todoList" class="todo-list empty">No tasks yet.</div>
+      </section>
+
+      <section class="panel notes-panel productivity-section">
+        <div class="panel-heading">
+          <div>
+            <h2>Notes</h2>
+            <p>Keep low-friction thoughts beside your rules, without opening another app.</p>
+          </div>
+          <button id="addNote" type="button">Add note</button>
+        </div>
+        <div class="note-compose">
+          <textarea id="noteBody" placeholder="Write a quiet thought, reminder, or decision..." aria-label="Note body"></textarea>
+        </div>
+        <div id="notesList" class="notes-list empty">No notes yet.</div>
+      </section>
+
+      <section class="panel lists-panel productivity-section">
+        <div class="panel-heading">
+          <div>
+            <h2>Lists</h2>
+            <p>Capture normal bullet lists for references, ideas, or grouped reminders.</p>
+          </div>
+          <button id="addList" type="button">Add list</button>
+        </div>
+        <div class="list-compose">
+          <input id="listTitle" type="text" placeholder="List name" aria-label="List name">
+          <textarea id="listItems" placeholder="One bullet per line" aria-label="List items"></textarea>
+        </div>
+        <div id="listsList" class="lists-list empty">No lists yet.</div>
+      </section>
+
+      <section class="grid two-columns">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Tab limits</h2>
+              <p>Close overflow tabs globally or for specific sites.</p>
+            </div>
+            <button id="addTabRule" type="button">Add</button>
+          </div>
+          <div class="global-tab-limits rule-card">
+            <div class="split-fields">
+              <label>
+                Max tabs per window
+                <input id="maxTabsPerWindow" type="number" min="1" placeholder="Unlimited" aria-label="Max tabs per window">
+              </label>
+              <label>
+                Max tabs total
+                <input id="maxTabsTotal" type="number" min="1" placeholder="Unlimited" aria-label="Max tabs total">
+              </label>
+            </div>
+          </div>
+          <div id="tabRules" class="rule-list"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Time limits</h2>
+              <p>Redirect sites once their daily, weekly, or monthly budget is used.</p>
+            </div>
+            <button id="addTimeRule" type="button">Add</button>
+          </div>
+          <div id="timeRules" class="rule-list"></div>
+        </article>
+      </section>
+
+      <section class="panel schedule-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Allowed schedules</h2>
+            <p>Allow selected site groups only on chosen weekdays and local times.</p>
+          </div>
+          <button id="addScheduleRule" type="button">Add</button>
+        </div>
+        <div id="scheduleRules" class="rule-list"></div>
+      </section>
+
+      <section class="panel reminder-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Reminders</h2>
+            <p>Pause playing media and show a break reminder after spending time on specific sites.</p>
+          </div>
+          <button id="addReminderRule" type="button">Add</button>
+        </div>
+        <div id="reminderRules" class="rule-list"></div>
+      </section>
+
+      <section class="panel usage-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Usage</h2>
+            <p>Daily, weekly from last Monday, or monthly breakdown.</p>
+          </div>
+          <select id="usagePeriod" aria-label="Usage period">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </div>
+
+        <div id="customRange" class="custom-range" hidden>
+          <label>
+            Start date
+            <input id="usageStartDate" type="date">
+          </label>
+          <label>
+            End date
+            <input id="usageEndDate" type="date">
+          </label>
+        </div>
+
+        <div class="usage-grid">
+          <div class="pie-wrap">
+            <div id="pieChart" class="pie-chart" role="img" aria-label="Usage pie chart"></div>
+            <div id="pieTooltip" class="pie-tooltip" hidden></div>
+          </div>
+          <p id="usageHint" class="usage-hint">Hover over a slice to see the website and time spent.</p>
+        </div>
+      </section>
+
+      <section class="panel debug-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Debug data</h2>
+            <p>Inspect the raw data saved by the extension in local storage.</p>
+          </div>
+          <button id="showRawData" type="button">Show raw data</button>
+        </div>
+        <pre id="rawData" class="raw-data" hidden></pre>
+      </section>
+
+      <section class="utility-grid">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Rules backup</h2>
+              <p>Export or import tab, time-limit, schedule, and reminder rules as JSON. Usage data is excluded.</p>
+            </div>
+            <div class="button-row">
+              <button id="exportRules" type="button">Export rules</button>
+              <button id="importRules" type="button">Import rules</button>
+            </div>
+          </div>
+          <input id="importRulesFile" class="visually-hidden" type="file" accept="application/json,.json">
+          <p id="rulesBackupStatus" class="status-text" role="status"></p>
+        </article>
+      </section>
+    </main>
+
+    <template id="tabRuleTemplate">
+      <form class="rule-card">
+        <input name="name" placeholder="Name, e.g., Social sites" aria-label="Name" required>
+        <textarea name="patterns" placeholder="Sites, e.g., x.com, www.google.com/search, *.youtube.com" aria-label="Sites" required></textarea>
+        <div class="split-fields">
+          <label>
+            Max open tabs
+            <input name="limit" type="number" min="1" value="1" required>
+          </label>
+          <label>
+            Count tabs
+            <select name="scope">
+              <option value="group">For whole group</option>
+              <option value="each">For each website</option>
+            </select>
+          </label>
+        </div>
+        <div class="rule-actions">
+          <label class="toggle-switch">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
+          </label>
+          <button class="danger" type="button" data-remove>Remove</button>
+        </div>
+      </form>
+    </template>
+
+    <template id="timeRuleTemplate">
+      <form class="rule-card">
+        <input name="name" placeholder="Name, e.g., Entertainment" aria-label="Name" required>
+        <textarea name="patterns" placeholder="Sites, e.g., www.youtube.com, www.google.com/search" aria-label="Sites" required></textarea>
+        <div class="split-fields">
+          <label>
+            Minutes
+            <input name="minutes" type="number" min="1" value="30" required>
+          </label>
+          <label>
+            Period
+            <select name="period">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Apply time limit
+          <select name="scope">
+            <option value="group">For whole group</option>
+            <option value="each">For each website</option>
+          </select>
+        </label>
+        <div class="rule-actions">
+          <label class="toggle-switch">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
+          </label>
+          <button class="danger" type="button" data-remove>Remove</button>
+        </div>
+      </form>
+    </template>
+
+    <template id="scheduleRuleTemplate">
+      <form class="rule-card">
+        <input name="name" placeholder="Name, e.g., Study resources" aria-label="Name" required>
+        <textarea name="patterns" placeholder="Allowed sites, e.g., docs.google.com, *.coursera.org" aria-label="Allowed sites" required></textarea>
+        <fieldset class="weekday-picker">
+          <legend>Allowed weekdays</legend>
+          <label class="inline-check"><input name="days" type="checkbox" value="1">Mon</label>
+          <label class="inline-check"><input name="days" type="checkbox" value="2">Tue</label>
+          <label class="inline-check"><input name="days" type="checkbox" value="3">Wed</label>
+          <label class="inline-check"><input name="days" type="checkbox" value="4">Thu</label>
+          <label class="inline-check"><input name="days" type="checkbox" value="5">Fri</label>
+          <label class="inline-check"><input name="days" type="checkbox" value="6">Sat</label>
+          <label class="inline-check"><input name="days" type="checkbox" value="0">Sun</label>
+        </fieldset>
+        <div class="split-fields">
+          <label>
+            Start time
+            <input name="startTime" type="time" value="09:00" required>
+          </label>
+          <label>
+            End time
+            <input name="endTime" type="time" value="17:00" required>
+          </label>
+        </div>
+        <div class="rule-actions">
+          <label class="toggle-switch">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
+          </label>
+          <button class="danger" type="button" data-remove>Remove</button>
+        </div>
+      </form>
+    </template>
+
+    <template id="reminderRuleTemplate">
+      <form class="rule-card">
+        <input name="name" placeholder="Name, e.g., YouTube break" aria-label="Name" required>
+        <textarea name="patterns" placeholder="Sites, e.g., *.youtube.com, netflix.com, twitch.tv" aria-label="Sites" required></textarea>
+        <div class="split-fields">
+          <label>
+            Minutes on site
+            <input name="minutes" type="number" min="1" value="20" required>
+          </label>
+          <label>
+            Reminder message (optional)
+            <input name="message" placeholder="Take a break from this site!" aria-label="Reminder message">
+          </label>
+        </div>
+        <div class="rule-actions">
+          <label class="toggle-switch">
+            <input name="enabled" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-text" data-enabled="Enabled" data-disabled="Disabled"></span>
+          </label>
+          <button class="danger" type="button" data-remove>Remove</button>
+        </div>
+      </form>
+    </template>
+
+    <script src="shared.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
