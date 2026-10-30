@@ -129,26 +129,28 @@
         </article>
       </section>
 
-      <section class="panel schedule-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Allowed schedules</h2>
-            <p>Allow selected site groups only on chosen weekdays and local times.</p>
+      <section class="grid two-columns">
+        <article class="panel schedule-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Allowed schedules</h2>
+              <p>Allow selected site groups only on chosen weekdays and local times.</p>
+            </div>
+            <button id="addScheduleRule" type="button">Add</button>
           </div>
-          <button id="addScheduleRule" type="button">Add</button>
-        </div>
-        <div id="scheduleRules" class="rule-list"></div>
-      </section>
+          <div id="scheduleRules" class="rule-list"></div>
+        </article>
 
-      <section class="panel reminder-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Reminders</h2>
-            <p>Pause playing media and show a break reminder after spending time on specific sites.</p>
+        <article class="panel reminder-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Reminders</h2>
+              <p>Pause playing media and show a break reminder after spending time on specific sites.</p>
+            </div>
+            <button id="addReminderRule" type="button">Add</button>
           </div>
-          <button id="addReminderRule" type="button">Add</button>
-        </div>
-        <div id="reminderRules" class="rule-list"></div>
+          <div id="reminderRules" class="rule-list"></div>
+        </article>
       </section>
 
       <section class="panel usage-panel">
@@ -297,15 +299,11 @@
           <label class="inline-check"><input name="days" type="checkbox" value="6">Sat</label>
           <label class="inline-check"><input name="days" type="checkbox" value="0">Sun</label>
         </fieldset>
-        <div class="split-fields">
-          <label>
-            Start time
-            <input name="startTime" type="time" value="09:00" required>
-          </label>
-          <label>
-            End time
-            <input name="endTime" type="time" value="17:00" required>
-          </label>
+        <div class="inline-schedule-time">
+          <span class="inline-label">From</span>
+          <input name="startTime" type="time" value="09:00" aria-label="Start time" required>
+          <span class="inline-label">to</span>
+          <input name="endTime" type="time" value="17:00" aria-label="End time" required>
         </div>
       </form>
     </template>

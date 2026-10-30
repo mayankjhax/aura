@@ -292,58 +292,9 @@ async function renderFocusStats() {
 }
 
 function renderFocusGraph(usage) {
-  const graph = document.getElementById("focusGraph");
   const days = getLastSevenDateKeys();
   const values = days.map((day) => usage[day] || 0);
-  const max = Math.max(...values, 1);
-  const points = values.map((value, index) => {
-    const x = 8 + index * 14;
-    const y = 82 - (value / max) * 66;
-    return `${x},${y}`;
-  });
-
-  graph.replaceChildren();
-  const svg = createSvgElement("svg");
-  svg.setAttribute("viewBox", "0 0 100 100");
-  svg.setAttribute("aria-hidden", "true");
-
-  const polyline = createSvgElement("polyline");
-  polyline.setAttribute("points", points.join(" "));
-  polyline.setAttribute("class", "focus-line");
-  svg.append(polyline);
-
-  points.forEach((point, index) => {
-    const [x, y] = point.split(",");
-    const circle = createSvgElement("circle");
-    circle.setAttribute("cx", x);
-    circle.setAttribute("cy", y);
-    circle.setAttribute("r", "2.4");
-    circle.setAttribute("class", "focus-dot");
-    svg.append(circle);
-
-    const label = document.createElement("span");
-    label.textContent = `${days[index].slice(5)} ${formatDuration(values[index])}`;
-    label.className = "focus-graph-label";
-    graph.append(label);
-  });
-
-  graph.prepend(svg);
-}
-
-function getLastSevenDateKeys() {
-  return Array.from({ length: 7 }, (_value, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
-    return todayKey(date);
-  });
-}
-
-async function sendRuntimeMessage(message) {
-  try {
-    return await chrome.runtime.sendMessage(message);
-  } catch {
-    return null;
-  }
+  renderLineChart("focusGraph", values, days);
 }
 
 async function renderUsage() {
@@ -377,39 +328,217 @@ function renderDailyUsageGraph(usage) {
   const totalEl = document.getElementById("dailyUsageTotal");
   if (totalEl) totalEl.textContent = `${formatDuration(total)} total`;
 
+  renderLineChart("dailyUsageGraph", values, days);
+}
+
+function renderLineChart(containerId, values, days, options = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.replaceChildren();
+
   const max = Math.max(...values, 1);
-  const points = values.map((value, index) => {
-    const x = 8 + index * 14;
-    const y = 82 - (value / max) * 66;
-    return `${x},${y}`;
+  const width = 640;
+  const height = 160;
+  const padLeft = 52;
+  const padRight = 24;
+  const padTop = 20;
+  const padBottom = 24;
+  const chartW = width - padLeft - padRight;
+  const chartH = height - padTop - padBottom;
+  const baselineY = padTop + chartH;
+
+  const points = values.map((val, i) => {
+    const x = padLeft + (i / (values.length - 1)) * chartW;
+    const y = baselineY - (val / max) * chartH;
+    return { x, y, val, day: days[i], index: i };
   });
 
-  graph.replaceChildren();
   const svg = createSvgElement("svg");
-  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "chart-svg");
   svg.setAttribute("aria-hidden", "true");
 
-  const polyline = createSvgElement("polyline");
-  polyline.setAttribute("points", points.join(" "));
-  polyline.setAttribute("class", "focus-line");
-  svg.append(polyline);
+  const defs = createSvgElement("defs");
+  const gradId = `chart-grad-${containerId}`;
 
-  points.forEach((point, index) => {
-    const [x, y] = point.split(",");
-    const circle = createSvgElement("circle");
-    circle.setAttribute("cx", x);
-    circle.setAttribute("cy", y);
-    circle.setAttribute("r", "2.4");
-    circle.setAttribute("class", "focus-dot");
-    svg.append(circle);
+  const gradient = createSvgElement("linearGradient");
+  gradient.setAttribute("id", gradId);
+  gradient.setAttribute("x1", "0");
+  gradient.setAttribute("y1", "0");
+  gradient.setAttribute("x2", "0");
+  gradient.setAttribute("y2", "1");
 
-    const label = document.createElement("span");
-    label.textContent = `${days[index].slice(5)} ${formatDuration(values[index])}`;
-    label.className = "focus-graph-label";
-    graph.append(label);
+  const stop1 = createSvgElement("stop");
+  stop1.setAttribute("offset", "0%");
+  stop1.setAttribute("stop-color", options.color || "var(--primary)");
+  stop1.setAttribute("stop-opacity", "0.28");
+
+  const stop2 = createSvgElement("stop");
+  stop2.setAttribute("offset", "100%");
+  stop2.setAttribute("stop-color", options.color || "var(--primary)");
+  stop2.setAttribute("stop-opacity", "0.0");
+
+  gradient.append(stop1, stop2);
+  defs.append(gradient);
+  svg.append(defs);
+
+  const gridLevels = [
+    { ratio: 1, label: formatDuration(max) },
+    { ratio: 0.5, label: formatDuration(Math.round(max / 2)) },
+    { ratio: 0, label: "0s" }
+  ];
+
+  gridLevels.forEach(({ ratio, label }) => {
+    const gy = baselineY - ratio * chartH;
+    const line = createSvgElement("line");
+    line.setAttribute("x1", padLeft);
+    line.setAttribute("y1", gy);
+    line.setAttribute("x2", width - padRight);
+    line.setAttribute("y2", gy);
+    line.setAttribute("class", "chart-grid-line");
+    svg.append(line);
+
+    const text = createSvgElement("text");
+    text.setAttribute("x", padLeft - 8);
+    text.setAttribute("y", gy + 3.5);
+    text.setAttribute("class", "chart-y-label");
+    text.textContent = label;
+    svg.append(text);
   });
 
-  graph.prepend(svg);
+  const curveD = buildSmoothPath(points);
+
+  if (points.length > 1) {
+    const areaD = `${curveD} L ${points[points.length - 1].x.toFixed(1)} ${baselineY} L ${points[0].x.toFixed(1)} ${baselineY} Z`;
+    const areaPath = createSvgElement("path");
+    areaPath.setAttribute("d", areaD);
+    areaPath.setAttribute("fill", `url(#${gradId})`);
+    areaPath.setAttribute("class", "chart-area");
+    svg.append(areaPath);
+  }
+
+  const strokePath = createSvgElement("path");
+  strokePath.setAttribute("d", curveD);
+  strokePath.setAttribute("class", "chart-line");
+  svg.append(strokePath);
+
+  const dotsGroup = createSvgElement("g");
+  dotsGroup.setAttribute("class", "chart-dots");
+
+  const labelsWrap = document.createElement("div");
+  labelsWrap.className = "chart-labels-row";
+
+  points.forEach((pt, i) => {
+    const dotWrap = createSvgElement("g");
+    dotWrap.setAttribute("class", "chart-dot-wrap");
+    dotWrap.dataset.index = String(pt.index);
+
+    const outer = createSvgElement("circle");
+    outer.setAttribute("cx", pt.x.toFixed(1));
+    outer.setAttribute("cy", pt.y.toFixed(1));
+    outer.setAttribute("r", "5");
+    outer.setAttribute("class", "chart-dot-outer");
+
+    const inner = createSvgElement("circle");
+    inner.setAttribute("cx", pt.x.toFixed(1));
+    inner.setAttribute("cy", pt.y.toFixed(1));
+    inner.setAttribute("r", "2.5");
+    inner.setAttribute("class", "chart-dot-inner");
+
+    const hit = createSvgElement("circle");
+    hit.setAttribute("cx", pt.x.toFixed(1));
+    hit.setAttribute("cy", pt.y.toFixed(1));
+    hit.setAttribute("r", "18");
+    hit.setAttribute("class", "chart-dot-hit");
+
+    dotWrap.append(outer, inner, hit);
+    dotsGroup.append(dotWrap);
+
+    const col = document.createElement("div");
+    col.className = "chart-col";
+    if (i === points.length - 1) col.classList.add("is-today");
+    if (pt.val > 0) col.classList.add("has-activity");
+    col.dataset.index = String(i);
+
+    const [yr, mo, da] = pt.day.split("-").map(Number);
+    const dateObj = new Date(yr, mo - 1, da);
+    const weekday = i === points.length - 1 ? "Today" : dateObj.toLocaleDateString("en-US", { weekday: "short" });
+    const formattedDate = `${mo}/${da}`;
+
+    const daySpan = document.createElement("span");
+    daySpan.className = "chart-col-weekday";
+    daySpan.textContent = weekday;
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "chart-col-date";
+    dateSpan.textContent = formattedDate;
+
+    const valSpan = document.createElement("span");
+    valSpan.className = "chart-col-value";
+    valSpan.textContent = formatDuration(pt.val);
+
+    col.append(daySpan, dateSpan, valSpan);
+
+    dotWrap.addEventListener("mouseenter", () => {
+      col.classList.add("active");
+      dotWrap.classList.add("active");
+    });
+    dotWrap.addEventListener("mouseleave", () => {
+      col.classList.remove("active");
+      dotWrap.classList.remove("active");
+    });
+    col.addEventListener("mouseenter", () => {
+      col.classList.add("active");
+      dotWrap.classList.add("active");
+    });
+    col.addEventListener("mouseleave", () => {
+      col.classList.remove("active");
+      dotWrap.classList.remove("active");
+    });
+
+    labelsWrap.append(col);
+  });
+
+  svg.append(dotsGroup);
+  container.append(svg, labelsWrap);
+}
+
+function buildSmoothPath(points) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function getLastSevenDateKeys() {
+  return Array.from({ length: 7 }, (_value, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    return todayKey(date);
+  });
+}
+
+async function sendRuntimeMessage(message) {
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch {
+    return null;
+  }
 }
 
 function syncCustomRangeVisibility() {
@@ -843,7 +972,7 @@ function renderTodoJourney(todo, steps) {
 
 function getTodoSteps(value) {
   const steps = String(value || "")
-    .split("→")
+    .split(/→|->|𐃘/)
     .map((step) => step.trim())
     .filter(Boolean);
 

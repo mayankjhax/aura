@@ -38,6 +38,7 @@ Strictly avoid working on below tasks, these are not finalized yet
 - Focus tracking: Focus Mode time is saved daily, resumes from today's previous total, and shows a 7-day line graph.
 - Todo editing: tasks can be edited inline and removed with a compact cross icon button.
 - Todo completion: clicking task text toggles completion; no checkbox or row divider is shown.
+- Tasks and journeys: task items can be chained into multi-step journeys separated by `→`, `->`, or `𐃘`. Each step can be clicked to toggle completion individually, with completion tracking persisting across edits.
 - Typography: regular controls/text use `14px`, section headers use `18px`, and buttons use `12px`; `h1` and `p` sizing is left unchanged.
 - Todo tags: one-word hashtags in task text are highlighted with separate foreground/background colors.
 - Todo tag colors: task hashtags show a floating color control on hover/focus, and chosen colors persist per tag.
@@ -60,7 +61,7 @@ Strictly avoid working on below tasks, these are not finalized yet
 - Use `Debug data` on the settings page to inspect the raw extension storage JSON.
 - Use `Rules backup` to export/import tab-limit, time-limit, schedule, and reminder rules.
 - Set `Reminders` for sites (like YouTube or Twitch); once the configured time is reached, all playing video/audio pauses and an overlay popup prompts you to take a break.
-- Use `Todo list` in settings for simple tasks; the popup shows the tasks-left count.
+- Use `Todo list` in settings for simple tasks; the popup shows the tasks-left count. Multi-step journeys can be created by separating tasks in a single row with `→`, `->`, or `𐃘` (e.g., `Draft email -> Review notes 𐃘 Send`).
 - Use `Notes` for quick pinned thoughts and `Lists` for reusable bullet lists.
 - Site patterns can be comma-separated or line-separated, for example `www.youtube.com, reddit.com, *.twitter.com`.
 - Patterns are exact unless they start with `*.`. For example, `www.youtube.com` does not match `music.youtube.com`, but `*.youtube.com` matches both.
