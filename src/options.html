@@ -3,97 +3,166 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Focus Guard Settings</title>
+    <title>Aura Settings</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <main class="page-shell">
-      <header class="hero">
-        <p class="eyebrow">Focus Guard</p>
-        <h1>Reduce stimulation. Increase focus.</h1>
-        <p>Limit noisy tabs, cap time on distracting sites, and review where your attention went.</p>
+      <header class="app-header">
+        <div class="app-brand">
+          <span class="app-logo">✦</span>
+          <h1 class="app-title">Aura</h1>
+        </div>
+        <p class="app-tagline">Reduce stimulation. Increase focus.</p>
       </header>
 
-      <section class="panel settings-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Appearance</h2>
-            <p>Choose light, dark, or follow your system theme.</p>
+      <nav class="app-tabs" role="tablist" aria-label="Aura navigation">
+        <button id="tabBtnFocus" class="tab-btn active" role="tab" data-tab="focus" aria-selected="true" aria-controls="tab-focus">
+          <span class="tab-label">Focus</span>
+        </button>
+        <button id="tabBtnAnalytics" class="tab-btn" role="tab" data-tab="analytics" aria-selected="false" aria-controls="tab-analytics">
+          <span class="tab-label">Stats</span>
+        </button>
+        <button id="tabBtnRules" class="tab-btn" role="tab" data-tab="rules" aria-selected="false" aria-controls="tab-rules">
+          <span class="tab-label">Rules</span>
+        </button>
+        <button id="tabBtnSettings" class="tab-btn" role="tab" data-tab="settings" aria-selected="false" aria-controls="tab-settings">
+          <span class="tab-label">Settings</span>
+        </button>
+      </nav>
+
+      <!-- TAB 1: FOCUS -->
+      <div id="tab-focus" class="tab-pane active" role="tabpanel" aria-labelledby="tabBtnFocus">
+        <section class="panel focus-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Focus mode</h2>
+              <p>Block selected websites while focus mode is turned on.</p>
+            </div>
+            <label class="toggle-switch">
+              <input id="focusModeEnabled" type="checkbox">
+              <span class="toggle-track" aria-hidden="true"></span>
+              <span class="toggle-text" data-enabled="On" data-disabled="Off"></span>
+            </label>
           </div>
-          <label class="compact-field">
-            Theme
-            <select id="themeMode" aria-label="Theme mode">
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
+          <textarea id="focusModePatterns" placeholder="Sites to block, e.g., x.com, reddit.com, *.youtube.com" aria-label="Focus mode blocked sites"></textarea>
+          <div class="focus-stats">
+            <div class="focus-stats-header">
+              <div class="focus-total">
+                <span>Focused today</span>
+                <strong id="focusToday">0s</strong>
+              </div>
+              <div class="week-nav">
+                <button id="focusPrevWeek" type="button" class="week-nav-btn" title="Previous week" aria-label="Previous week">‹</button>
+                <span id="focusWeekRange" class="week-nav-label">This week</span>
+                <button id="focusNextWeek" type="button" class="week-nav-btn" title="Next week" aria-label="Next week" disabled>›</button>
+              </div>
+            </div>
+            <div id="focusGraph" class="focus-graph" aria-label="Focus time this week">
+              <canvas id="focusGraphCanvas" aria-label="Focus time this week chart" role="img"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel todo-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Tasks</h2>
+              <p>Capture the next small step and keep your focus loop visible.</p>
+            </div>
+            <button id="addTodo" type="button">Add</button>
+          </div>
+          <div id="todoList" class="todo-list empty">No tasks yet.</div>
+        </section>
+
+        <section class="panel notes-panel productivity-section">
+          <div class="panel-heading">
+            <div>
+              <h2>Notes</h2>
+              <p>Keep low-friction thoughts beside your rules, without opening another app.</p>
+            </div>
+            <button id="addNote" type="button">Add note</button>
+          </div>
+          <div class="note-compose">
+            <textarea id="noteBody" placeholder="Write a quiet thought, reminder, or decision..." aria-label="Note body"></textarea>
+          </div>
+          <div id="notesList" class="notes-list empty">No notes yet.</div>
+        </section>
+
+        <section class="panel lists-panel productivity-section">
+          <div class="panel-heading">
+            <div>
+              <h2>Lists</h2>
+              <p>Capture normal bullet lists for references, ideas, or grouped reminders.</p>
+            </div>
+            <button id="addList" type="button">Add list</button>
+          </div>
+          <div class="list-compose">
+            <input id="listTitle" type="text" placeholder="List name" aria-label="List name">
+            <textarea id="listItems" placeholder="One bullet per line" aria-label="List items"></textarea>
+          </div>
+          <div id="listsList" class="lists-list empty">No lists yet.</div>
+        </section>
+      </div>
+
+      <!-- TAB 2: STATS -->
+      <div id="tab-analytics" class="tab-pane" role="tabpanel" aria-labelledby="tabBtnAnalytics" hidden>
+        <section class="panel usage-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Usage</h2>
+              <p>Daily, weekly from last Monday, or monthly breakdown.</p>
+            </div>
+            <select id="usagePeriod" aria-label="Usage period">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="custom">Custom range</option>
             </select>
-          </label>
-        </div>
-      </section>
-
-      <section class="panel focus-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Focus mode</h2>
-            <p>Block selected websites while focus mode is turned on.</p>
           </div>
-          <label class="toggle-switch">
-            <input id="focusModeEnabled" type="checkbox">
-            <span class="toggle-track" aria-hidden="true"></span>
-            <span class="toggle-text" data-enabled="On" data-disabled="Off"></span>
-          </label>
-        </div>
-        <textarea id="focusModePatterns" placeholder="Sites to block, e.g., x.com, reddit.com, *.youtube.com" aria-label="Focus mode blocked sites"></textarea>
-        <div class="focus-stats">
-          <div class="focus-total">
-            <span>Focused today</span>
-            <strong id="focusToday">0s</strong>
-          </div>
-          <div id="focusGraph" class="focus-graph" aria-label="Focus time this week"></div>
-        </div>
-      </section>
 
-      <section class="panel todo-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Tasks</h2>
-            <p>Capture the next small step and keep your focus loop visible.</p>
+          <div id="customRange" class="custom-range" hidden>
+            <label>
+              Start date
+              <input id="usageStartDate" type="date">
+            </label>
+            <label>
+              End date
+              <input id="usageEndDate" type="date">
+            </label>
           </div>
-          <button id="addTodo" type="button">Add</button>
-        </div>
-        <div id="todoList" class="todo-list empty">No tasks yet.</div>
-      </section>
 
-      <section class="panel notes-panel productivity-section">
-        <div class="panel-heading">
-          <div>
-            <h2>Notes</h2>
-            <p>Keep low-friction thoughts beside your rules, without opening another app.</p>
+          <div class="usage-grid">
+            <div class="pie-wrap">
+              <div id="pieEmptyState" class="pie-empty-state" hidden>No usage tracked for this period.</div>
+              <div id="pieChartContainer" class="pie-chart-container">
+                <canvas id="pieChartCanvas" role="img" aria-label="Usage pie chart"></canvas>
+              </div>
+            </div>
+            <p id="usageHint" class="usage-hint">Hover over a slice to see the website and time spent.</p>
           </div>
-          <button id="addNote" type="button">Add note</button>
-        </div>
-        <div class="note-compose">
-          <textarea id="noteBody" placeholder="Write a quiet thought, reminder, or decision..." aria-label="Note body"></textarea>
-        </div>
-        <div id="notesList" class="notes-list empty">No notes yet.</div>
-      </section>
 
-      <section class="panel lists-panel productivity-section">
-        <div class="panel-heading">
-          <div>
-            <h2>Lists</h2>
-            <p>Capture normal bullet lists for references, ideas, or grouped reminders.</p>
+          <div class="daily-usage-section">
+            <div class="daily-usage-heading">
+              <div class="daily-usage-title-group">
+                <h3>Daily browsing time</h3>
+                <span id="dailyUsageTotal" class="daily-usage-total">0s total</span>
+              </div>
+              <div class="week-nav">
+                <button id="dailyUsagePrevWeek" type="button" class="week-nav-btn" title="Previous week" aria-label="Previous week">‹</button>
+                <span id="dailyUsageWeekRange" class="week-nav-label">This week</span>
+                <button id="dailyUsageNextWeek" type="button" class="week-nav-btn" title="Next week" aria-label="Next week" disabled>›</button>
+              </div>
+            </div>
+            <div id="dailyUsageGraph" class="focus-graph" aria-label="Daily usage this week">
+              <canvas id="dailyUsageCanvas" aria-label="Daily browsing time chart" role="img"></canvas>
+            </div>
           </div>
-          <button id="addList" type="button">Add list</button>
-        </div>
-        <div class="list-compose">
-          <input id="listTitle" type="text" placeholder="List name" aria-label="List name">
-          <textarea id="listItems" placeholder="One bullet per line" aria-label="List items"></textarea>
-        </div>
-        <div id="listsList" class="lists-list empty">No lists yet.</div>
-      </section>
+        </section>
+      </div>
 
-      <section class="grid two-columns">
+      <!-- TAB 3: RULES -->
+      <div id="tab-rules" class="tab-pane" role="tabpanel" aria-labelledby="tabBtnRules" hidden>
         <article class="panel">
           <div class="panel-heading">
             <div>
@@ -127,9 +196,7 @@
           </div>
           <div id="timeRules" class="rule-list"></div>
         </article>
-      </section>
 
-      <section class="grid two-columns">
         <article class="panel schedule-panel">
           <div class="panel-heading">
             <div>
@@ -151,62 +218,47 @@
           </div>
           <div id="reminderRules" class="rule-list"></div>
         </article>
-      </section>
+      </div>
 
-      <section class="panel usage-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Usage</h2>
-            <p>Daily, weekly from last Monday, or monthly breakdown.</p>
+      <!-- TAB 4: SETTINGS -->
+      <div id="tab-settings" class="tab-pane" role="tabpanel" aria-labelledby="tabBtnSettings" hidden>
+        <section class="panel settings-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Appearance</h2>
+              <p>Choose light, dark, or follow your system theme, and customize your toolbar icon.</p>
+            </div>
+            <div class="settings-controls">
+              <label class="compact-field">
+                Theme
+                <select id="themeMode" aria-label="Theme mode">
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+              <div class="compact-field emoji-picker-field">
+                <span class="field-label">Toolbar icon</span>
+                <div id="emojiPickerGroup" class="emoji-picker-group">
+                  <div id="emojiPickerBtn" class="emoji-button" role="button" tabindex="0" aria-label="Choose toolbar icon emoji" aria-haspopup="dialog" aria-expanded="false" title="Click to choose toolbar icon emoji">
+                    <span id="emojiDisplay" class="emoji-char">🎯</span>
+                    <button id="clearIconEmoji" type="button" class="emoji-clear-badge" title="Reset to default icon" aria-label="Reset to default icon">×</button>
+                  </div>
+                  <div id="emojiPopup" class="emoji-popup" role="dialog" aria-label="Select an emoji" hidden>
+                    <div class="emoji-popup-header">
+                      <input id="emojiSearchInput" type="text" placeholder="Search or paste emoji..." aria-label="Search or paste emoji">
+                    </div>
+                    <div id="emojiGrid" class="emoji-grid" role="listbox"></div>
+                    <div class="emoji-popup-footer">
+                      <button id="emojiDefaultBtn" type="button" class="secondary-button emoji-default-btn">Reset to default icon</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <select id="usagePeriod" aria-label="Usage period">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="custom">Custom range</option>
-          </select>
-        </div>
+        </section>
 
-        <div id="customRange" class="custom-range" hidden>
-          <label>
-            Start date
-            <input id="usageStartDate" type="date">
-          </label>
-          <label>
-            End date
-            <input id="usageEndDate" type="date">
-          </label>
-        </div>
-
-        <div class="usage-grid">
-          <div class="pie-wrap">
-            <div id="pieChart" class="pie-chart" role="img" aria-label="Usage pie chart"></div>
-            <div id="pieTooltip" class="pie-tooltip" hidden></div>
-          </div>
-          <p id="usageHint" class="usage-hint">Hover over a slice to see the website and time spent.</p>
-        </div>
-
-        <div class="daily-usage-section">
-          <div class="daily-usage-heading">
-            <h3>Daily browsing time (past 7 days)</h3>
-            <span id="dailyUsageTotal" class="daily-usage-total">0s total</span>
-          </div>
-          <div id="dailyUsageGraph" class="focus-graph" aria-label="Daily usage this week"></div>
-        </div>
-      </section>
-
-      <section class="panel debug-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Debug data</h2>
-            <p>Inspect the raw data saved by the extension in local storage.</p>
-          </div>
-          <button id="showRawData" type="button">Show raw data</button>
-        </div>
-        <pre id="rawData" class="raw-data" hidden></pre>
-      </section>
-
-      <section class="utility-grid">
         <article class="panel">
           <div class="panel-heading">
             <div>
@@ -221,7 +273,18 @@
           <input id="importRulesFile" class="visually-hidden" type="file" accept="application/json,.json">
           <p id="rulesBackupStatus" class="status-text" role="status"></p>
         </article>
-      </section>
+
+        <section class="panel debug-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Debug data</h2>
+              <p>Inspect the raw data saved by the extension in local storage.</p>
+            </div>
+            <button id="showRawData" type="button">Show raw data</button>
+          </div>
+          <pre id="rawData" class="raw-data" hidden></pre>
+        </section>
+      </div>
     </main>
 
     <template id="tabRuleTemplate">
@@ -332,6 +395,7 @@
       </form>
     </template>
 
+    <script src="vendor/chart.umd.min.js"></script>
     <script src="shared.js"></script>
     <script src="options.js"></script>
   </body>

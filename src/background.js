@@ -6,8 +6,16 @@ const FOCUS_HEARTBEAT_CAP_MS = 30 * 1000;
 let idleState = "active";
 
 chrome.runtime.onInstalled.addListener(async () => {
+  if (chrome.sidePanel?.setPanelBehavior) {
+    try {
+      await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    } catch (err) {
+      console.warn("Could not set side panel behavior on install:", err);
+    }
+  }
   chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
-  await getSettings();
+  const settings = await getSettings();
+  await updateExtensionIcon(settings.iconEmoji);
   await updateFocusModeBadge();
   await syncFocusModeSession();
   await refreshActiveSession();
@@ -15,14 +23,36 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 chrome.runtime.onStartup.addListener(async () => {
+  if (chrome.sidePanel?.setPanelBehavior) {
+    try {
+      await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    } catch (err) {
+      console.warn("Could not set side panel behavior on startup:", err);
+    }
+  }
   chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
+  const settings = await getSettings();
+  await updateExtensionIcon(settings.iconEmoji);
   await updateFocusModeBadge();
   await syncFocusModeSession();
   await refreshActiveSession();
   await enforceAllTabs();
 });
 
-chrome.action.onClicked.addListener(() => {
+// Configure side panel to open when clicking the toolbar action icon
+if (chrome.sidePanel?.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+    console.warn("Could not set side panel behavior:", err);
+  });
+}
+
+chrome.action.onClicked.addListener(async (tab) => {
+  if (chrome.sidePanel?.open && tab?.windowId) {
+    try {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+      return;
+    } catch {}
+  }
   chrome.runtime.openOptionsPage();
 });
 
@@ -86,8 +116,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "FOCUS_GUARD_UPDATE_ICON") {
+    updateExtensionIcon(message.emoji)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
+
   if (message?.type === "FOCUS_GUARD_ENFORCE") {
-    updateFocusModeBadge()
+    getSettings()
+      .then((settings) => updateExtensionIcon(settings.iconEmoji))
+      .then(updateFocusModeBadge)
       .then(syncFocusModeSession)
       .then(enforceAllTabs)
       .then(() => sendResponse({ ok: true }));
@@ -226,44 +265,45 @@ async function enforceAllTabs() {
 async function runEnforceAllTabs() {
   const settings = await getSettings();
   const tabs = (await chrome.tabs.query({})).filter((tab) =>
-    getHost(tab.url || ""),
+    getHost(tab.url || tab.pendingUrl || ""),
   );
 
-  await enforceFocusMode(tabs, settings.focusMode);
-  await enforceAllowedSchedules(tabs, settings.allowedSchedules);
-  await enforceTabLimits(tabs, settings.tabLimits);
-  await enforceTimeLimits(tabs, settings.timeLimits);
+  await enforceFocusMode(tabs, settings.focusMode, settings);
+  await enforceAllowedSchedules(tabs, settings.allowedSchedules, settings);
+  await enforceTabLimits(tabs, settings.tabLimits, settings);
+  await enforceTimeLimits(tabs, settings.timeLimits, settings);
   await enforceGlobalTabLimits(settings);
 }
 
-async function enforceFocusMode(tabs, focusMode) {
+async function enforceFocusMode(tabs, focusMode, settings) {
   if (!focusMode?.enabled || !normalizePatterns(focusMode.patterns).length)
     return;
 
   const matchingTabs = tabs.filter((tab) =>
-    urlMatchesPatterns(tab.url || "", focusMode.patterns),
+    urlMatchesPatterns(tab.url || tab.pendingUrl || "", focusMode.patterns),
   );
 
   for (const tab of matchingTabs) {
-    await safeRemoveTab(tab.id);
+    await closeRestrictedTab(tab, settings);
   }
 }
 
-async function enforceAllowedSchedules(tabs, rules) {
+async function enforceAllowedSchedules(tabs, rules, settings) {
   const now = new Date();
 
   for (const tab of tabs) {
+    const tabUrl = tab.url || tab.pendingUrl || "";
     const matchingRule = (rules || []).find((rule) => {
       return (
         rule.enabled !== false &&
         normalizePatterns(rule.patterns).length &&
-        urlMatchesPatterns(tab.url || "", rule.patterns)
+        urlMatchesPatterns(tabUrl, rule.patterns)
       );
     });
 
     if (!matchingRule || isWithinAllowedSchedule(matchingRule, now)) continue;
 
-    await safeRemoveTab(tab.id);
+    await closeRestrictedTab(tab, settings);
   }
 }
 
@@ -331,12 +371,12 @@ async function isBrowserActivelyUsed() {
   return windows.some((window) => window.focused);
 }
 
-async function enforceTabLimits(tabs, rules) {
+async function enforceTabLimits(tabs, rules, settings) {
   for (const rule of rules || []) {
     if (rule.enabled === false || !Number(rule.limit)) continue;
 
     const matchingTabs = tabs.filter((tab) =>
-      urlMatchesPatterns(tab.url || "", rule.patterns),
+      urlMatchesPatterns(tab.url || tab.pendingUrl || "", rule.patterns),
     );
     const groups =
       rule.scope === "each" ? groupTabsByHost(matchingTabs) : [matchingTabs];
@@ -350,7 +390,7 @@ async function enforceTabLimits(tabs, rules) {
         .slice(0, overflow);
 
       for (const tab of tabsToClose) {
-        await safeRemoveTab(tab.id);
+        await closeRestrictedTab(tab, settings);
       }
 
       const scopeLabel =
@@ -367,7 +407,7 @@ function groupTabsByHost(tabs) {
   const groups = new Map();
 
   tabs.forEach((tab) => {
-    const host = getHost(tab.url || "");
+    const host = getHost(tab.url || tab.pendingUrl || "");
     groups.set(host, [...(groups.get(host) || []), tab]);
   });
 
@@ -445,21 +485,22 @@ async function enforceGlobalTabLimits(settings) {
   }
 }
 
-async function enforceTimeLimits(tabs, rules) {
+async function enforceTimeLimits(tabs, rules, settings) {
   const usage = await getUsage();
   const pathUsage = await getPathUsage();
 
   for (const tab of tabs) {
+    const targetUrl = tab.url || tab.pendingUrl || "";
     const matchingRules = (rules || []).filter((rule) => {
       return (
         rule.enabled !== false &&
         Number(rule.minutes) &&
-        urlMatchesPatterns(tab.url || "", rule.patterns)
+        urlMatchesPatterns(targetUrl, rule.patterns)
       );
     });
 
     for (const rule of matchingRules) {
-      const targetHost = rule.scope === "each" ? getHost(tab.url || "") : "";
+      const targetHost = rule.scope === "each" ? getHost(targetUrl) : "";
       const used = periodUsageForTimeRule(
         usage,
         pathUsage,
@@ -470,7 +511,7 @@ async function enforceTimeLimits(tabs, rules) {
       );
       if (used < Number(rule.minutes) * 60 * 1000) continue;
 
-      await safeRemoveTab(tab.id);
+      await closeRestrictedTab(tab, settings);
       break;
     }
   }
@@ -535,6 +576,89 @@ async function safeRemoveTab(tabId) {
   } catch (_error) {
     // Tab may have disappeared between query and remove.
   }
+}
+
+async function closeRestrictedTab(tab, settings) {
+  const tabId = typeof tab === "object" ? tab.id : tab;
+  let windowId = typeof tab === "object" ? tab.windowId : null;
+
+  if (!tabId) return;
+
+  try {
+    if (!windowId) {
+      const tabInfo = await chrome.tabs.get(tabId);
+      windowId = tabInfo?.windowId;
+    } else {
+      await chrome.tabs.get(tabId);
+    }
+  } catch (_err) {
+    // Tab already closed or gone
+    return;
+  }
+
+  let isOnlyTabInWindow = false;
+  if (windowId) {
+    try {
+      const windowTabs = await chrome.tabs.query({ windowId });
+      isOnlyTabInWindow = windowTabs.length === 1 && windowTabs[0].id === tabId;
+    } catch (_err) {
+      isOnlyTabInWindow = false;
+    }
+  }
+
+  if (isOnlyTabInWindow) {
+    const activeSettings = settings || (await getSettings());
+    const maxTotal = parseTabLimitInput(activeSettings?.maxTabsTotal);
+    const maxPerWindow = parseTabLimitInput(activeSettings?.maxTabsPerWindow);
+
+    let canKeepEmptyTab = true;
+
+    // Window tab limit check
+    if (maxPerWindow && maxPerWindow < 1) {
+      canKeepEmptyTab = false;
+    }
+
+    // Global total tab limit check:
+    // If the current eligible tab count across all windows already exceeds maxTotal,
+    // converting this tab to an empty open tab would violate the total tab limit.
+    if (canKeepEmptyTab && maxTotal) {
+      try {
+        const windows = await chrome.windows.getAll({
+          populate: true,
+          windowTypes: ["normal"],
+        });
+        const allEligibleTabs = windows
+          .flatMap((win) => win.tabs || [])
+          .filter((t) => !isProtectedTab(t));
+        if (allEligibleTabs.length > maxTotal) {
+          canKeepEmptyTab = false;
+        }
+      } catch (_err) {
+        canKeepEmptyTab = false;
+      }
+    }
+
+    if (canKeepEmptyTab) {
+      try {
+        const createProps = { windowId, active: true };
+        if (typeof tab === "object" && typeof tab.index === "number") {
+          createProps.index = tab.index;
+        }
+        await chrome.tabs.create(createProps);
+        await safeRemoveTab(tabId);
+        return;
+      } catch (_err) {
+        try {
+          await chrome.tabs.update(tabId, { url: "about:blank" });
+          return;
+        } catch (_e) {
+          // Fallback to safe remove below
+        }
+      }
+    }
+  }
+
+  await safeRemoveTab(tabId);
 }
 
 async function getReminderStatus(url, { isVisible = true, hasMedia = false } = {}) {
@@ -638,11 +762,11 @@ async function takeBreakAndCloseTabs(ruleId) {
 
   const allTabs = await chrome.tabs.query({});
   const tabsToClose = allTabs.filter(
-    (tab) => !isProtectedTab(tab) && urlMatchesPatterns(tab.url || "", rule.patterns)
+    (tab) => !isProtectedTab(tab) && urlMatchesPatterns(tab.url || tab.pendingUrl || "", rule.patterns)
   );
 
   for (const tab of tabsToClose) {
-    await safeRemoveTab(tab.id);
+    await closeRestrictedTab(tab, settings);
   }
 }
 
@@ -658,5 +782,147 @@ async function snoozeReminder(ruleId, minutes = 5) {
 }
 
 function notify(title, message) {
-  console.info(`[Focus Guard] ${title}: ${message}`);
+  console.info(`[Aura] ${title}: ${message}`);
 }
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes[STORAGE_KEYS.SETTINGS]) {
+    const newSettings = changes[STORAGE_KEYS.SETTINGS].newValue;
+    const oldSettings = changes[STORAGE_KEYS.SETTINGS].oldValue;
+    if (newSettings && newSettings.iconEmoji !== oldSettings?.iconEmoji) {
+      updateExtensionIcon(newSettings.iconEmoji);
+    }
+  }
+});
+
+async function loadDefaultIconImageData() {
+  const sizes = [16, 32, 48, 128];
+  const imageData = {};
+  for (const size of sizes) {
+    try {
+      const url = chrome.runtime.getURL(`icons/${size}.png`);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(size, size);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0, size, size);
+      imageData[size] = ctx.getImageData(0, 0, size, size);
+    } catch (err) {
+      console.warn(`Could not load default icon for size ${size}:`, err);
+    }
+  }
+  return imageData;
+}
+
+function createEmojiImageDataSet(emoji) {
+  const SIZES = [16, 24, 32, 48, 64, 128];
+  const fontFam = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+
+  // 1. Render emoji at high resolution on intermediate canvas
+  const srcSize = 128;
+  const srcCanvas = new OffscreenCanvas(srcSize, srcSize);
+  const srcCtx = srcCanvas.getContext("2d");
+  srcCtx.font = `100px ${fontFam}`;
+  srcCtx.textAlign = "center";
+  srcCtx.textBaseline = "middle";
+  srcCtx.fillText(emoji, srcSize / 2, srcSize / 2);
+
+  // 2. Scan actual pixel alpha bounding box to trim font margins
+  const imgData = srcCtx.getImageData(0, 0, srcSize, srcSize);
+  const data = imgData.data;
+  let minX = srcSize;
+  let minY = srcSize;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < srcSize; y++) {
+    const rowOffset = y * srcSize * 4;
+    for (let x = 0; x < srcSize; x++) {
+      if (data[rowOffset + x * 4 + 3] > 15) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const result = {};
+
+  // If no colored pixels were detected (font fallback issue), do direct render fallback
+  if (maxX < minX || maxY < minY) {
+    for (const size of SIZES) {
+      const canvas = new OffscreenCanvas(size, size);
+      const ctx = canvas.getContext("2d");
+      ctx.font = `${Math.round(size * 1.2)}px ${fontFam}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(emoji, size / 2, size / 2);
+      result[size] = ctx.getImageData(0, 0, size, size);
+    }
+    return result;
+  }
+
+  // 3. Crop tightly to visible pixels and scale to fill ~98% of the icon tile
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+
+  for (const size of SIZES) {
+    const canvas = new OffscreenCanvas(size, size);
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    const targetDim = size * 0.98;
+    const scale = Math.min(targetDim / cropW, targetDim / cropH);
+    const destW = cropW * scale;
+    const destH = cropH * scale;
+    const destX = (size - destW) / 2;
+    const destY = (size - destH) / 2;
+
+    ctx.drawImage(srcCanvas, minX, minY, cropW, cropH, destX, destY, destW, destH);
+    result[size] = ctx.getImageData(0, 0, size, size);
+  }
+
+  return result;
+}
+
+async function updateExtensionIcon(emoji) {
+  const trimmed = typeof emoji === "string" ? emoji.trim() : "";
+  if (!trimmed) {
+    try {
+      const defaultImageData = await loadDefaultIconImageData();
+      if (Object.keys(defaultImageData).length > 0) {
+        await chrome.action.setIcon({ imageData: defaultImageData });
+      } else {
+        await chrome.action.setIcon({
+          path: {
+            16: "icons/16.png",
+            32: "icons/32.png",
+            48: "icons/48.png",
+            128: "icons/128.png"
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to reset extension icon to default:", err);
+    }
+    return;
+  }
+
+  try {
+    const imageData = createEmojiImageDataSet(trimmed);
+    await chrome.action.setIcon({ imageData });
+  } catch (err) {
+    console.warn("Failed to set extension icon to emoji:", err);
+  }
+}
+
+// Initialize icon on worker startup if an emoji is already configured
+getSettings().then((settings) => {
+  if (settings.iconEmoji) {
+    updateExtensionIcon(settings.iconEmoji);
+  }
+});
+

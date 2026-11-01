@@ -1,4 +1,36 @@
-const COLORS = ["#7f1d1d", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#be123c", "#4d7c0f"];
+const COLORS = [
+  "#ef4444", "#3b82f6", "#10b981", "#f59e0b",
+  "#8b5cf6", "#06b6d4", "#f97316", "#84cc16",
+  "#ec4899", "#6366f1", "#14b8a6", "#a855f7"
+];
+const chartInstances = {};
+
+function getChartTheme() {
+  const isDark = document.documentElement.dataset.theme === "dark" ||
+    (!document.documentElement.dataset.theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  return {
+    isDark,
+    textColor: isDark ? "#d4bbb4" : "#765d5d",
+    gridColor: isDark ? "rgba(90, 51, 51, 0.45)" : "rgba(234, 215, 208, 0.65)",
+    lineColor: isDark ? "#ef9a9a" : "#7f1d1d",
+    cardBg: isDark ? "#2b1a1a" : "#ffffff",
+    tooltipBg: isDark ? "#1f1212" : "#2a1212",
+    tooltipText: "#fff7f3",
+    tooltipBorder: isDark ? "#5a3333" : "#3f1d1d"
+  };
+}
+
+function hexToRgba(hex, alpha) {
+  if (!hex || !hex.startsWith("#")) {
+    return `rgba(127, 29, 29, ${alpha})`;
+  }
+  const cleanHex = hex.replace("#", "");
+  const r = parseInt(cleanHex.slice(0, 2), 16);
+  const g = parseInt(cleanHex.slice(2, 4), 16);
+  const b = parseInt(cleanHex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 let settings = DEFAULT_SETTINGS;
 let todos = [];
 let tagColors = {};
@@ -11,15 +43,286 @@ let tagColorControl = null;
 let tagColorControlTarget = null;
 let tagColorHideTimer = null;
 
+let focusWeekOffset = 0;
+let dailyUsageWeekOffset = 0;
+let cachedFocusUsageData = null;
+let cachedUsageData = null;
+
+const EMOJI_LIST = [
+  { emoji: "🎯", tags: "target focus aim bullseye" },
+  { emoji: "⚡", tags: "lightning bolt energy flash fast electric" },
+  { emoji: "🔥", tags: "fire flame hot streak" },
+  { emoji: "🧠", tags: "brain mind think smart focus" },
+  { emoji: "💡", tags: "idea lightbulb bulb creative inspiration" },
+  { emoji: "🚀", tags: "rocket space launch ship boost" },
+  { emoji: "⏱️", tags: "stopwatch timer time clock" },
+  { emoji: "⏳", tags: "hourglass time sand wait timer" },
+  { emoji: "🔔", tags: "bell alert notification ring" },
+  { emoji: "🛡️", tags: "shield protect guard security aura" },
+  { emoji: "💻", tags: "laptop computer tech code work developer" },
+  { emoji: "📚", tags: "books study read school learn library" },
+  { emoji: "📖", tags: "book open read story literature" },
+  { emoji: "✏️", tags: "pencil write note draw edit" },
+  { emoji: "📝", tags: "memo note document paper write task" },
+  { emoji: "📊", tags: "chart graph stats analysis data" },
+  { emoji: "💼", tags: "briefcase business work job office" },
+  { emoji: "🎧", tags: "headphones music listen audio podcast focus" },
+  { emoji: "☕", tags: "coffee cup tea mug morning caffeinated drink" },
+  { emoji: "🍵", tags: "tea green matcha drink warm" },
+  { emoji: "🌿", tags: "herb leaf plant green nature branch sprout" },
+  { emoji: "🌲", tags: "tree pine evergreen forest nature woods" },
+  { emoji: "🌸", tags: "flower cherry blossom sakura pink nature" },
+  { emoji: "🌊", tags: "wave water ocean sea blue calm" },
+  { emoji: "🌙", tags: "moon crescent night dark sleep evening" },
+  { emoji: "☀️", tags: "sun sunny bright light day morning" },
+  { emoji: "🪴", tags: "plant potted houseplant leaf green" },
+  { emoji: "🍀", tags: "clover four leaf luck lucky green" },
+  { emoji: "🪐", tags: "saturn planet space ring cosmos" },
+  { emoji: "💎", tags: "diamond gem jewel shine precious crystal" },
+  { emoji: "✨", tags: "sparkles sparkle star magic shine clean" },
+  { emoji: "⭐", tags: "star yellow gold favorite rating" },
+  { emoji: "🏆", tags: "trophy award winner champion cup gold" },
+  { emoji: "🥇", tags: "first medal gold winner 1st prize" },
+  { emoji: "🧘", tags: "meditation yoga zen calm breathe peace" },
+  { emoji: "🧊", tags: "ice cube cold chill frozen" },
+  { emoji: "🫧", tags: "bubbles bubble water clean soap" },
+  { emoji: "🦉", tags: "owl bird night wise smart nature" },
+  { emoji: "🦊", tags: "fox animal cute orange smart" },
+  { emoji: "🐱", tags: "cat kitten kitty pet animal cute" },
+  { emoji: "🐶", tags: "dog puppy pet animal friend cute" },
+  { emoji: "🦁", tags: "lion brave wild animal cat king" },
+  { emoji: "🐼", tags: "panda bear cute animal calm" },
+  { emoji: "🐻", tags: "bear animal forest cute" },
+  { emoji: "🐺", tags: "wolf wild pack animal nature" },
+  { emoji: "🐬", tags: "dolphin ocean sea swim animal" },
+  { emoji: "🐝", tags: "bee honey insect busy worker" },
+  { emoji: "🦋", tags: "butterfly nature insect wing pretty" },
+  { emoji: "🍅", tags: "tomato pomodoro focus timer red fruit" },
+  { emoji: "🥑", tags: "avocado fruit healthy food green" },
+  { emoji: "🍎", tags: "apple red fruit food teacher health" },
+  { emoji: "🍊", tags: "orange citrus fruit food fresh" },
+  { emoji: "🍉", tags: "watermelon melon fruit food summer" }
+];
+
 document.addEventListener("DOMContentLoaded", initOptions);
 
 const DEFAULT_SCHEDULE_DAYS = [1, 2, 3, 4, 5];
 
 async function initOptions() {
-  await applyStoredTheme();
-  await sendRuntimeMessage({ type: "FOCUS_GUARD_FLUSH" });
-  settings = await getSettings();
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    try {
+      await applyStoredTheme();
+      await sendRuntimeMessage({ type: "FOCUS_GUARD_FLUSH" });
+      settings = await getSettings();
+    } catch {
+      settings = DEFAULT_SETTINGS;
+    }
+  } else {
+    settings = DEFAULT_SETTINGS;
+  }
   document.getElementById("themeMode").value = settings.theme || "system";
+
+  const emojiDisplay = document.getElementById("emojiDisplay");
+  const emojiPickerBtn = document.getElementById("emojiPickerBtn");
+  const clearIconEmojiBtn = document.getElementById("clearIconEmoji");
+  const emojiPopup = document.getElementById("emojiPopup");
+  const emojiSearchInput = document.getElementById("emojiSearchInput");
+  const emojiDefaultBtn = document.getElementById("emojiDefaultBtn");
+
+  const updateEmojiDisplay = (val) => {
+    const trimmed = val ? val.trim() : "";
+    if (!emojiDisplay || !emojiPickerBtn) return;
+    if (trimmed) {
+      emojiDisplay.textContent = trimmed;
+      emojiPickerBtn.classList.add("has-custom-emoji");
+      emojiPickerBtn.title = `Toolbar icon: ${trimmed} (Click to change, hover cross to reset)`;
+    } else {
+      emojiDisplay.innerHTML = '<img src="../icons/32.png" alt="Default icon" class="default-icon-img">';
+      emojiPickerBtn.classList.remove("has-custom-emoji");
+      emojiPickerBtn.title = "Default toolbar icon (Click to choose emoji)";
+    }
+  };
+
+  const handleEmojiChange = async (val) => {
+    const trimmed = val ? val.trim() : "";
+    settings.iconEmoji = trimmed;
+    updateEmojiDisplay(trimmed);
+    await persistSettings(false);
+    await sendRuntimeMessage({ type: "FOCUS_GUARD_UPDATE_ICON", emoji: trimmed });
+  };
+
+  const openEmojiPopup = () => {
+    if (!emojiPopup) return;
+    emojiPopup.hidden = false;
+    if (emojiPickerBtn) emojiPickerBtn.setAttribute("aria-expanded", "true");
+    if (emojiSearchInput) {
+      emojiSearchInput.value = "";
+      renderEmojiGrid("");
+      setTimeout(() => emojiSearchInput.focus(), 50);
+    }
+  };
+
+  const closeEmojiPopup = () => {
+    if (!emojiPopup || emojiPopup.hidden) return;
+    emojiPopup.hidden = true;
+    if (emojiPickerBtn) emojiPickerBtn.setAttribute("aria-expanded", "false");
+  };
+
+  const toggleEmojiPopup = () => {
+    if (emojiPopup && !emojiPopup.hidden) {
+      closeEmojiPopup();
+    } else {
+      openEmojiPopup();
+    }
+  };
+
+  const renderEmojiGrid = (filterText = "") => {
+    const grid = document.getElementById("emojiGrid");
+    if (!grid) return;
+    grid.replaceChildren();
+
+    const query = filterText.toLowerCase().trim();
+
+    if (query && /\p{Extended_Pictographic}/u.test(query)) {
+      const rawMatch = query.match(/\p{Extended_Pictographic}+/u);
+      if (rawMatch) {
+        const customEmoji = rawMatch[0];
+        const customBtn = document.createElement("button");
+        customBtn.type = "button";
+        customBtn.className = "emoji-item-btn";
+        customBtn.textContent = customEmoji;
+        customBtn.title = `Use ${customEmoji}`;
+        customBtn.addEventListener("click", () => {
+          handleEmojiChange(customEmoji);
+          closeEmojiPopup();
+        });
+        grid.appendChild(customBtn);
+      }
+    }
+
+    const matches = EMOJI_LIST.filter((item) => {
+      if (!query) return true;
+      return item.emoji === query || item.tags.toLowerCase().includes(query);
+    });
+
+    if (matches.length === 0 && !grid.hasChildNodes()) {
+      const emptyMsg = document.createElement("div");
+      emptyMsg.className = "emoji-empty-msg";
+      emptyMsg.textContent = "No matching emoji found. Type/paste any emoji above!";
+      grid.appendChild(emptyMsg);
+      return;
+    }
+
+    matches.forEach((item) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emoji-item-btn";
+      btn.textContent = item.emoji;
+      btn.title = item.emoji;
+      btn.addEventListener("click", () => {
+        handleEmojiChange(item.emoji);
+        closeEmojiPopup();
+      });
+      grid.appendChild(btn);
+    });
+  };
+
+  if (emojiPickerBtn) {
+    updateEmojiDisplay(settings.iconEmoji || "");
+
+    emojiPickerBtn.addEventListener("click", (e) => {
+      if (e.target.closest("#clearIconEmoji")) return;
+      toggleEmojiPopup();
+    });
+
+    emojiPickerBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleEmojiPopup();
+      }
+    });
+
+    if (clearIconEmojiBtn) {
+      clearIconEmojiBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleEmojiChange("");
+        closeEmojiPopup();
+      });
+    }
+
+    if (emojiSearchInput) {
+      emojiSearchInput.addEventListener("input", (e) => {
+        renderEmojiGrid(e.target.value);
+      });
+      emojiSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && emojiSearchInput.value.trim()) {
+          const val = emojiSearchInput.value.trim();
+          if (/\p{Extended_Pictographic}/u.test(val)) {
+            const rawMatch = val.match(/\p{Extended_Pictographic}+/u);
+            if (rawMatch) {
+              handleEmojiChange(rawMatch[0]);
+              closeEmojiPopup();
+            }
+          }
+        }
+      });
+    }
+
+    if (emojiDefaultBtn) {
+      emojiDefaultBtn.addEventListener("click", () => {
+        handleEmojiChange("");
+        closeEmojiPopup();
+      });
+    }
+
+    document.addEventListener("click", (e) => {
+      const pickerGroup = document.getElementById("emojiPickerGroup");
+      if (pickerGroup && !pickerGroup.contains(e.target)) {
+        closeEmojiPopup();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeEmojiPopup();
+      }
+    });
+  }
+
+  const focusPrevBtn = document.getElementById("focusPrevWeek");
+  const focusNextBtn = document.getElementById("focusNextWeek");
+  if (focusPrevBtn) {
+    focusPrevBtn.addEventListener("click", () => {
+      focusWeekOffset++;
+      renderFocusGraph();
+    });
+  }
+  if (focusNextBtn) {
+    focusNextBtn.addEventListener("click", () => {
+      if (focusWeekOffset > 0) {
+        focusWeekOffset--;
+        renderFocusGraph();
+      }
+    });
+  }
+
+  const dailyUsagePrevBtn = document.getElementById("dailyUsagePrevWeek");
+  const dailyUsageNextBtn = document.getElementById("dailyUsageNextWeek");
+  if (dailyUsagePrevBtn) {
+    dailyUsagePrevBtn.addEventListener("click", () => {
+      dailyUsageWeekOffset++;
+      renderDailyUsageGraph();
+    });
+  }
+  if (dailyUsageNextBtn) {
+    dailyUsageNextBtn.addEventListener("click", () => {
+      if (dailyUsageWeekOffset > 0) {
+        dailyUsageWeekOffset--;
+        renderDailyUsageGraph();
+      }
+    });
+  }
+
   document.getElementById("focusModeEnabled").checked = Boolean(settings.focusMode?.enabled);
   document.getElementById("focusModePatterns").value = settings.focusMode?.patterns || "";
 
@@ -97,7 +400,18 @@ async function initOptions() {
     settings.theme = event.target.value;
     applyThemeMode(settings.theme);
     await persistSettings(false);
+    await renderFocusStats();
+    await renderUsage();
   });
+
+  if (typeof matchMedia !== "undefined") {
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if ((settings.theme || "system") === "system") {
+        renderFocusStats();
+        renderUsage();
+      }
+    });
+  }
   document.getElementById("focusModeEnabled").addEventListener("change", persistFocusMode);
   document.getElementById("focusModePatterns").addEventListener("input", persistFocusMode);
   document.getElementById("showRawData").addEventListener("click", toggleRawData);
@@ -108,10 +422,36 @@ async function initOptions() {
   document.getElementById("addNote").addEventListener("click", addNote);
   document.getElementById("addList").addEventListener("click", addList);
 
-  todos = await getTodos();
-  tagColors = await getTagColors();
-  notes = await getNotes();
-  lists = await getLists();
+  todos = [];
+  tagColors = {};
+  notes = [];
+  lists = [];
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    try {
+      todos = await getTodos();
+      tagColors = await getTagColors();
+      notes = await getNotes();
+      lists = await getLists();
+    } catch {
+      todos = [];
+      notes = [];
+      lists = [];
+    }
+  }
+
+  // Setup tab navigation
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      switchTab(btn.dataset.tab);
+    });
+  });
+
+  const hashTab = location.hash.replace("#", "").toLowerCase();
+  const validTabs = ["focus", "analytics", "rules", "settings"];
+  const initialTab = validTabs.includes(hashTab)
+    ? hashTab
+    : (localStorage.getItem("aura_active_tab") || "focus");
+
   syncCustomRangeVisibility();
   renderRules();
   renderTodos();
@@ -120,6 +460,56 @@ async function initOptions() {
   await renderFocusStats();
   focusStatsTimer = setInterval(renderFocusStats, 1000);
   await renderUsage();
+
+  switchTab(initialTab);
+}
+
+function switchTab(tabId) {
+  const tabs = [
+    { id: "focus", btnId: "tabBtnFocus", paneId: "tab-focus" },
+    { id: "analytics", btnId: "tabBtnAnalytics", paneId: "tab-analytics" },
+    { id: "rules", btnId: "tabBtnRules", paneId: "tab-rules" },
+    { id: "settings", btnId: "tabBtnSettings", paneId: "tab-settings" }
+  ];
+
+  const matched = tabs.find((t) => t.id === tabId);
+  const activeTabId = matched ? matched.id : "focus";
+
+  tabs.forEach((tab) => {
+    const pane = document.getElementById(tab.paneId);
+    const btn = document.getElementById(tab.btnId);
+    const isActive = tab.id === activeTabId;
+
+    if (pane) {
+      pane.hidden = !isActive;
+      pane.classList.toggle("active", isActive);
+    }
+    if (btn) {
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-selected", String(isActive));
+    }
+  });
+
+  try {
+    localStorage.setItem("aura_active_tab", activeTabId);
+  } catch {}
+
+  // Resize and refresh charts when switching to tabs containing charts
+  if (activeTabId === "analytics") {
+    setTimeout(() => {
+      renderUsage();
+      const pie = chartInstances["pieChartCanvas"];
+      const daily = chartInstances["dailyUsageCanvas"];
+      if (pie) pie.resize();
+      if (daily) daily.resize();
+    }, 40);
+  } else if (activeTabId === "focus") {
+    setTimeout(() => {
+      renderFocusStats();
+      const focusChart = chartInstances["focusGraphCanvas"];
+      if (focusChart) focusChart.resize();
+    }, 40);
+  }
 }
 
 function renderRules() {
@@ -266,8 +656,10 @@ function readReminderRule(form) {
 }
 
 async function persistSettings(enforce = true) {
-  await saveSettings(settings);
-  if (enforce) await sendRuntimeMessage({ type: "FOCUS_GUARD_ENFORCE" });
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    await saveSettings(settings);
+    if (enforce) await sendRuntimeMessage({ type: "FOCUS_GUARD_ENFORCE" });
+  }
 }
 
 async function persistFocusMode() {
@@ -282,8 +674,14 @@ async function persistFocusMode() {
 }
 
 async function renderFocusStats() {
-  await sendRuntimeMessage({ type: "FOCUS_GUARD_FOCUS_FLUSH" });
-  const usage = await getFocusUsage();
+  let usage = {};
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    await sendRuntimeMessage({ type: "FOCUS_GUARD_FOCUS_FLUSH" });
+    usage = await getFocusUsage();
+  } else if (cachedFocusUsageData) {
+    usage = cachedFocusUsageData;
+  }
+  cachedFocusUsageData = usage;
   const today = todayKey();
   const todayMs = usage[today] || 0;
 
@@ -291,14 +689,30 @@ async function renderFocusStats() {
   renderFocusGraph(usage);
 }
 
-function renderFocusGraph(usage) {
-  const days = getLastSevenDateKeys();
+function renderFocusGraph(usage = cachedFocusUsageData || {}) {
+  cachedFocusUsageData = usage;
+  const days = getSevenDateKeys(focusWeekOffset);
   const values = days.map((day) => usage[day] || 0);
-  renderLineChart("focusGraph", values, days);
+
+  const rangeLabel = document.getElementById("focusWeekRange");
+  if (rangeLabel) rangeLabel.textContent = formatWeekRangeLabel(days, focusWeekOffset);
+  const nextBtn = document.getElementById("focusNextWeek");
+  if (nextBtn) nextBtn.disabled = focusWeekOffset <= 0;
+
+  renderLineChart("focusGraphCanvas", values, days, {
+    label: "Focus time",
+    weekOffset: focusWeekOffset
+  });
 }
 
 async function renderUsage() {
-  const usage = await getUsage();
+  let usage = {};
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    usage = await getUsage();
+  } else if (cachedUsageData) {
+    usage = cachedUsageData;
+  }
+  cachedUsageData = usage;
   const { startKey, endKey } = getSelectedUsageRange();
   const totals = {};
 
@@ -315,11 +729,12 @@ async function renderUsage() {
   renderDailyUsageGraph(usage);
 }
 
-function renderDailyUsageGraph(usage) {
-  const graph = document.getElementById("dailyUsageGraph");
-  if (!graph) return;
+function renderDailyUsageGraph(usage = cachedUsageData || {}) {
+  cachedUsageData = usage;
+  const canvas = document.getElementById("dailyUsageCanvas");
+  if (!canvas) return;
 
-  const days = getLastSevenDateKeys();
+  const days = getSevenDateKeys(dailyUsageWeekOffset);
   const values = days.map((day) => {
     const dayData = usage[day] || {};
     return Object.values(dayData).reduce((sum, ms) => sum + (Number(ms) || 0), 0);
@@ -328,209 +743,169 @@ function renderDailyUsageGraph(usage) {
   const totalEl = document.getElementById("dailyUsageTotal");
   if (totalEl) totalEl.textContent = `${formatDuration(total)} total`;
 
-  renderLineChart("dailyUsageGraph", values, days);
+  const rangeLabel = document.getElementById("dailyUsageWeekRange");
+  if (rangeLabel) rangeLabel.textContent = formatWeekRangeLabel(days, dailyUsageWeekOffset);
+  const nextBtn = document.getElementById("dailyUsageNextWeek");
+  if (nextBtn) nextBtn.disabled = dailyUsageWeekOffset <= 0;
+
+  renderLineChart("dailyUsageCanvas", values, days, {
+    label: "Browsing time",
+    weekOffset: dailyUsageWeekOffset
+  });
 }
 
-function renderLineChart(containerId, values, days, options = {}) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
+function renderLineChart(canvasId, values, days, options = {}) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === "undefined") return;
 
-  container.replaceChildren();
+  const theme = getChartTheme();
+  const primaryColor = options.color || theme.lineColor;
 
-  const max = Math.max(...values, 1);
-  const width = 640;
-  const height = 160;
-  const padLeft = 52;
-  const padRight = 24;
-  const padTop = 20;
-  const padBottom = 24;
-  const chartW = width - padLeft - padRight;
-  const chartH = height - padTop - padBottom;
-  const baselineY = padTop + chartH;
-
-  const points = values.map((val, i) => {
-    const x = padLeft + (i / (values.length - 1)) * chartW;
-    const y = baselineY - (val / max) * chartH;
-    return { x, y, val, day: days[i], index: i };
-  });
-
-  const svg = createSvgElement("svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("class", "chart-svg");
-  svg.setAttribute("aria-hidden", "true");
-
-  const defs = createSvgElement("defs");
-  const gradId = `chart-grad-${containerId}`;
-
-  const gradient = createSvgElement("linearGradient");
-  gradient.setAttribute("id", gradId);
-  gradient.setAttribute("x1", "0");
-  gradient.setAttribute("y1", "0");
-  gradient.setAttribute("x2", "0");
-  gradient.setAttribute("y2", "1");
-
-  const stop1 = createSvgElement("stop");
-  stop1.setAttribute("offset", "0%");
-  stop1.setAttribute("stop-color", options.color || "var(--primary)");
-  stop1.setAttribute("stop-opacity", "0.28");
-
-  const stop2 = createSvgElement("stop");
-  stop2.setAttribute("offset", "100%");
-  stop2.setAttribute("stop-color", options.color || "var(--primary)");
-  stop2.setAttribute("stop-opacity", "0.0");
-
-  gradient.append(stop1, stop2);
-  defs.append(gradient);
-  svg.append(defs);
-
-  const gridLevels = [
-    { ratio: 1, label: formatDuration(max) },
-    { ratio: 0.5, label: formatDuration(Math.round(max / 2)) },
-    { ratio: 0, label: "0s" }
-  ];
-
-  gridLevels.forEach(({ ratio, label }) => {
-    const gy = baselineY - ratio * chartH;
-    const line = createSvgElement("line");
-    line.setAttribute("x1", padLeft);
-    line.setAttribute("y1", gy);
-    line.setAttribute("x2", width - padRight);
-    line.setAttribute("y2", gy);
-    line.setAttribute("class", "chart-grid-line");
-    svg.append(line);
-
-    const text = createSvgElement("text");
-    text.setAttribute("x", padLeft - 8);
-    text.setAttribute("y", gy + 3.5);
-    text.setAttribute("class", "chart-y-label");
-    text.textContent = label;
-    svg.append(text);
-  });
-
-  const curveD = buildSmoothPath(points);
-
-  if (points.length > 1) {
-    const areaD = `${curveD} L ${points[points.length - 1].x.toFixed(1)} ${baselineY} L ${points[0].x.toFixed(1)} ${baselineY} Z`;
-    const areaPath = createSvgElement("path");
-    areaPath.setAttribute("d", areaD);
-    areaPath.setAttribute("fill", `url(#${gradId})`);
-    areaPath.setAttribute("class", "chart-area");
-    svg.append(areaPath);
-  }
-
-  const strokePath = createSvgElement("path");
-  strokePath.setAttribute("d", curveD);
-  strokePath.setAttribute("class", "chart-line");
-  svg.append(strokePath);
-
-  const dotsGroup = createSvgElement("g");
-  dotsGroup.setAttribute("class", "chart-dots");
-
-  const labelsWrap = document.createElement("div");
-  labelsWrap.className = "chart-labels-row";
-
-  points.forEach((pt, i) => {
-    const dotWrap = createSvgElement("g");
-    dotWrap.setAttribute("class", "chart-dot-wrap");
-    dotWrap.dataset.index = String(pt.index);
-
-    const outer = createSvgElement("circle");
-    outer.setAttribute("cx", pt.x.toFixed(1));
-    outer.setAttribute("cy", pt.y.toFixed(1));
-    outer.setAttribute("r", "5");
-    outer.setAttribute("class", "chart-dot-outer");
-
-    const inner = createSvgElement("circle");
-    inner.setAttribute("cx", pt.x.toFixed(1));
-    inner.setAttribute("cy", pt.y.toFixed(1));
-    inner.setAttribute("r", "2.5");
-    inner.setAttribute("class", "chart-dot-inner");
-
-    const hit = createSvgElement("circle");
-    hit.setAttribute("cx", pt.x.toFixed(1));
-    hit.setAttribute("cy", pt.y.toFixed(1));
-    hit.setAttribute("r", "18");
-    hit.setAttribute("class", "chart-dot-hit");
-
-    dotWrap.append(outer, inner, hit);
-    dotsGroup.append(dotWrap);
-
-    const col = document.createElement("div");
-    col.className = "chart-col";
-    if (i === points.length - 1) col.classList.add("is-today");
-    if (pt.val > 0) col.classList.add("has-activity");
-    col.dataset.index = String(i);
-
-    const [yr, mo, da] = pt.day.split("-").map(Number);
+  const labels = days.map((day, i) => {
+    const [yr, mo, da] = day.split("-").map(Number);
     const dateObj = new Date(yr, mo - 1, da);
-    const weekday = i === points.length - 1 ? "Today" : dateObj.toLocaleDateString("en-US", { weekday: "short" });
-    const formattedDate = `${mo}/${da}`;
-
-    const daySpan = document.createElement("span");
-    daySpan.className = "chart-col-weekday";
-    daySpan.textContent = weekday;
-
-    const dateSpan = document.createElement("span");
-    dateSpan.className = "chart-col-date";
-    dateSpan.textContent = formattedDate;
-
-    const valSpan = document.createElement("span");
-    valSpan.className = "chart-col-value";
-    valSpan.textContent = formatDuration(pt.val);
-
-    col.append(daySpan, dateSpan, valSpan);
-
-    dotWrap.addEventListener("mouseenter", () => {
-      col.classList.add("active");
-      dotWrap.classList.add("active");
-    });
-    dotWrap.addEventListener("mouseleave", () => {
-      col.classList.remove("active");
-      dotWrap.classList.remove("active");
-    });
-    col.addEventListener("mouseenter", () => {
-      col.classList.add("active");
-      dotWrap.classList.add("active");
-    });
-    col.addEventListener("mouseleave", () => {
-      col.classList.remove("active");
-      dotWrap.classList.remove("active");
-    });
-
-    labelsWrap.append(col);
+    const isToday = (options.weekOffset === 0 && i === days.length - 1);
+    const weekday = isToday ? "Today" : dateObj.toLocaleDateString("en-US", { weekday: "short" });
+    const monthShort = dateObj.toLocaleDateString("en-US", { month: "short" });
+    return [weekday, `${da} ${monthShort}`];
   });
 
-  svg.append(dotsGroup);
-  container.append(svg, labelsWrap);
-}
-
-function buildSmoothPath(points) {
-  if (!points.length) return "";
-  if (points.length === 1) return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-
-  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  const existingChart = chartInstances[canvasId];
+  if (existingChart && existingChart._isDark === theme.isDark && existingChart._weekOffset === options.weekOffset) {
+    const currentData = existingChart.data.datasets[0].data;
+    const hasDataChanged = values.length !== currentData.length || values.some((val, idx) => val !== currentData[idx]);
+    if (hasDataChanged) {
+      existingChart.data.datasets[0].data = values;
+      existingChart.options.scales.y.suggestedMax = Math.max(...values, 60000);
+      existingChart.update("none");
+    }
+    return;
   }
-  return d;
+
+  if (existingChart) {
+    existingChart.destroy();
+    delete chartInstances[canvasId];
+  }
+
+  const ctx = canvas.getContext("2d");
+  const chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: options.label || "Time",
+          data: values,
+          borderColor: primaryColor,
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: true,
+          backgroundColor: (context) => {
+            const chartArea = context.chart.chartArea;
+            if (!chartArea) return "transparent";
+            const gradient = context.chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, hexToRgba(primaryColor, 0.35));
+            gradient.addColorStop(1, hexToRgba(primaryColor, 0.01));
+            return gradient;
+          },
+          pointBackgroundColor: theme.cardBg,
+          pointBorderColor: primaryColor,
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: primaryColor,
+          pointHoverBorderColor: theme.cardBg,
+          pointHoverBorderWidth: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.tooltipBorder,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          displayColors: false,
+          callbacks: {
+            title: (items) => {
+              if (!items.length) return "";
+              const idx = items[0].dataIndex;
+              const day = days[idx];
+              const [yr, mo, da] = day.split("-").map(Number);
+              const dateObj = new Date(yr, mo - 1, da);
+              const monthShort = dateObj.toLocaleDateString("en-US", { month: "short" });
+              const isToday = options.weekOffset === 0 && idx === days.length - 1;
+              const weekday = isToday ? "Today" : dateObj.toLocaleDateString("en-US", { weekday: "long" });
+              return `${weekday} (${da} ${monthShort})`;
+            },
+            label: (context) => `${options.label || "Time"}: ${formatDuration(context.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: theme.textColor,
+            font: { family: "Inter, ui-sans-serif, system-ui, sans-serif", size: 11, weight: "600" }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMax: Math.max(...values, 60000),
+          grid: {
+            color: theme.gridColor,
+            drawTicks: false
+          },
+          border: { display: false },
+          ticks: {
+            color: theme.textColor,
+            font: { family: "Inter, ui-sans-serif, system-ui, sans-serif", size: 10 },
+            callback: (val) => formatDuration(val),
+            maxTicksLimit: 5,
+            padding: 8
+          }
+        }
+      }
+    }
+  });
+
+  chart._isDark = theme.isDark;
+  chart._weekOffset = options.weekOffset;
+  chartInstances[canvasId] = chart;
 }
 
-function getLastSevenDateKeys() {
+function getSevenDateKeys(weekOffset = 0) {
   return Array.from({ length: 7 }, (_value, index) => {
     const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
+    date.setDate(date.getDate() - (weekOffset * 7) - (6 - index));
     return todayKey(date);
   });
+}
+
+function formatWeekRangeLabel(days, weekOffset) {
+  if (weekOffset === 0) return "This week";
+  const [firstYr, firstMo, firstDa] = days[0].split("-").map(Number);
+  const [lastYr, lastMo, lastDa] = days[6].split("-").map(Number);
+  const firstDate = new Date(firstYr, firstMo - 1, firstDa);
+  const lastDate = new Date(lastYr, lastMo - 1, lastDa);
+  const firstMoName = firstDate.toLocaleDateString("en-US", { month: "short" });
+  const lastMoName = lastDate.toLocaleDateString("en-US", { month: "short" });
+  if (firstMoName === lastMoName) {
+    return `${firstDa} – ${lastDa} ${firstMoName}`;
+  }
+  return `${firstDa} ${firstMoName} – ${lastDa} ${lastMoName}`;
 }
 
 async function sendRuntimeMessage(message) {
@@ -565,73 +940,79 @@ function getSelectedUsageRange() {
 }
 
 function renderPie(entries) {
-  const chart = document.getElementById("pieChart");
-  const tooltip = document.getElementById("pieTooltip");
+  const canvas = document.getElementById("pieChartCanvas");
+  const emptyState = document.getElementById("pieEmptyState");
+  const container = document.getElementById("pieChartContainer");
   const hint = document.getElementById("usageHint");
   const total = entries.reduce((sum, [, ms]) => sum + ms, 0);
-  chart.replaceChildren();
-  tooltip.hidden = true;
-  chart.style.background = "";
 
-  if (!total) {
-    chart.setAttribute("aria-label", "No usage tracked for this period");
-    hint.textContent = "No usage tracked for this period.";
+  if (chartInstances["pieChartCanvas"]) {
+    chartInstances["pieChartCanvas"].destroy();
+    delete chartInstances["pieChartCanvas"];
+  }
+
+  if (!total || !entries.length) {
+    if (emptyState) emptyState.hidden = false;
+    if (container) container.hidden = true;
+    if (hint) hint.textContent = "No usage tracked for this period.";
     return;
   }
 
-  chart.setAttribute("aria-label", `Usage pie chart with ${entries.length} sites`);
-  hint.textContent = `Total time: ${formatDuration(total)}`;
+  if (emptyState) emptyState.hidden = true;
+  if (container) container.hidden = false;
+  if (hint) hint.textContent = `Total time: ${formatDuration(total)}`;
 
-  const svg = createSvgElement("svg");
-  svg.setAttribute("viewBox", "0 0 100 100");
-  svg.setAttribute("aria-hidden", "true");
+  if (!canvas || typeof Chart === "undefined") return;
 
-  let cursor = -90;
-  entries.forEach(([host, ms], index) => {
-    const sweep = (ms / total) * 360;
-    const path = createSvgElement("path");
-    path.setAttribute("d", describeSlice(50, 50, 50, cursor, cursor + sweep));
-    path.setAttribute("fill", COLORS[index]);
-    path.tabIndex = 0;
+  const theme = getChartTheme();
+  const ctx = canvas.getContext("2d");
 
-    const showTooltip = () => {
-      tooltip.textContent = `${host}: ${formatDuration(ms)}`;
-      tooltip.hidden = false;
-    };
-    const hideTooltip = () => {
-      tooltip.hidden = true;
-    };
-
-    path.addEventListener("mouseenter", showTooltip);
-    path.addEventListener("focus", showTooltip);
-    path.addEventListener("mouseleave", hideTooltip);
-    path.addEventListener("blur", hideTooltip);
-
-    svg.append(path);
-    cursor += sweep;
+  const chart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: entries.map(([host]) => host),
+      datasets: [
+        {
+          data: entries.map(([, ms]) => ms),
+          backgroundColor: COLORS.slice(0, entries.length),
+          borderColor: theme.cardBg,
+          borderWidth: 2,
+          hoverOffset: 10
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: {
+        duration: 400
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.tooltipBorder,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (context) => {
+              const ms = context.parsed;
+              const pct = total ? Math.round((ms / total) * 100) : 0;
+              return ` ${context.label}: ${formatDuration(ms)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
   });
 
-  chart.append(svg);
-}
-
-function createSvgElement(tagName) {
-  return document.createElementNS("http://www.w3.org/2000/svg", tagName);
-}
-
-function describeSlice(cx, cy, radius, startAngle, endAngle) {
-  const start = polarToCartesian(cx, cy, radius, endAngle);
-  const end = polarToCartesian(cx, cy, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-
-  return [`M ${cx} ${cy}`, `L ${start.x} ${start.y}`, `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`, "Z"].join(" ");
-}
-
-function polarToCartesian(cx, cy, radius, angleInDegrees) {
-  const angleInRadians = (angleInDegrees * Math.PI) / 180;
-  return {
-    x: cx + radius * Math.cos(angleInRadians),
-    y: cy + radius * Math.sin(angleInRadians)
-  };
+  chart._isDark = theme.isDark;
+  chartInstances["pieChartCanvas"] = chart;
 }
 
 async function renderRawData() {
@@ -661,6 +1042,8 @@ function exportRules() {
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
+    theme: settings.theme || "system",
+    iconEmoji: settings.iconEmoji ?? "",
     maxTabsPerWindow: settings.maxTabsPerWindow ?? null,
     maxTabsTotal: settings.maxTabsTotal ?? null,
     tabLimits: settings.tabLimits || [],
@@ -673,7 +1056,7 @@ function exportRules() {
   const anchor = document.createElement("a");
 
   anchor.href = url;
-  anchor.download = `focus-guard-rules-${todayKey()}.json`;
+  anchor.download = `aura-rules-${todayKey()}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
   setRulesBackupStatus("Rules exported. Usage data was not included.");
@@ -699,6 +1082,12 @@ async function importRules(event) {
       settings.maxTabsTotal = parseTabLimitInput(imported.maxTabsTotal);
       const totalInput = document.getElementById("maxTabsTotal");
       if (totalInput) totalInput.value = settings.maxTabsTotal || "";
+    }
+    if ("iconEmoji" in imported) {
+      const emoji = typeof imported.iconEmoji === "string" ? imported.iconEmoji.trim() : "";
+      settings.iconEmoji = emoji;
+      updateEmojiDisplay(emoji);
+      await sendRuntimeMessage({ type: "FOCUS_GUARD_UPDATE_ICON", emoji });
     }
 
     settings.tabLimits = [...(settings.tabLimits || []), ...tabLimits.map(normalizeImportedRule)];

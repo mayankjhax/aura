@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
     patterns: ""
   },
   theme: "system",
+  iconEmoji: "",
   maxTabsPerWindow: null,
   maxTabsTotal: null
 };
