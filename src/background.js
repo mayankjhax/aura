@@ -20,6 +20,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   await syncFocusModeSession();
   await refreshActiveSession();
   await enforceAllTabs();
+  setupContextMenus();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
@@ -925,4 +926,35 @@ getSettings().then((settings) => {
     updateExtensionIcon(settings.iconEmoji);
   }
 });
+
+function setupContextMenus() {
+  if (!chrome.contextMenus) return;
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "aura-add-to-notes",
+      title: "Add to Aura Notes",
+      contexts: ["selection"]
+    });
+  });
+}
+
+setupContextMenus();
+
+if (chrome.contextMenus?.onClicked) {
+  chrome.contextMenus.onClicked.addListener(async (info) => {
+    if (info.menuItemId === "aura-add-to-notes" && info.selectionText) {
+      const text = info.selectionText.trim();
+      if (!text) return;
+      const currentNotes = await getNotes();
+      currentNotes.unshift({
+        id: createRuleId(),
+        body: text,
+        pinned: false,
+        updatedAt: Date.now()
+      });
+      await saveNotes(currentNotes);
+    }
+  });
+}
+
 

@@ -418,25 +418,21 @@ async function initOptions() {
   document.getElementById("exportRules").addEventListener("click", exportRules);
   document.getElementById("importRules").addEventListener("click", () => document.getElementById("importRulesFile").click());
   document.getElementById("importRulesFile").addEventListener("change", importRules);
-  document.getElementById("addTodo").addEventListener("click", startTodoDraft);
-  document.getElementById("addNote").addEventListener("click", addNote);
-  document.getElementById("addList").addEventListener("click", addList);
+  setupWorkspaceListeners();
 
   todos = [];
   tagColors = {};
   notes = [];
   lists = [];
-  if (typeof chrome !== "undefined" && chrome.storage?.local) {
-    try {
-      todos = await getTodos();
-      tagColors = await getTagColors();
-      notes = await getNotes();
-      lists = await getLists();
-    } catch {
-      todos = [];
-      notes = [];
-      lists = [];
-    }
+  try {
+    todos = await getTodos();
+    tagColors = await getTagColors();
+    notes = await getNotes();
+    lists = await getLists();
+  } catch {
+    todos = [];
+    notes = [];
+    lists = [];
   }
 
   // Setup tab navigation
@@ -457,6 +453,15 @@ async function initOptions() {
   renderTodos();
   renderNotes();
   renderLists();
+
+  if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes[STORAGE_KEYS.NOTES]) {
+        notes = changes[STORAGE_KEYS.NOTES].newValue || [];
+        renderNotes();
+      }
+    });
+  }
   await renderFocusStats();
   focusStatsTimer = setInterval(renderFocusStats, 1000);
   await renderUsage();
@@ -544,19 +549,12 @@ function renderRuleList(containerId, templateId, rules, readRule, fillRule = fil
 
     form.querySelector("[data-remove]").addEventListener("click", (event) => {
       const button = event.currentTarget;
-
-      if (button.dataset.confirming !== "true") {
-        button.dataset.confirming = "true";
-        button.classList.add("confirm-remove");
-        button.textContent = "Confirm?";
-        setTimeout(() => resetRemoveButton(button), 3000);
-        return;
-      }
-
-      const index = rules.findIndex((candidate) => candidate.id === rule.id);
-      if (index >= 0) rules.splice(index, 1);
-      renderRules();
-      persistSettings();
+      confirmIconRemove(button, () => {
+        const index = rules.findIndex((candidate) => candidate.id === rule.id);
+        if (index >= 0) rules.splice(index, 1);
+        renderRules();
+        persistSettings();
+      });
     });
 
     container.append(form);
@@ -564,18 +562,21 @@ function renderRuleList(containerId, templateId, rules, readRule, fillRule = fil
 }
 
 function resetRemoveButton(button) {
-  if (!button.isConnected || button.dataset.confirming !== "true") return;
-
-  button.dataset.confirming = "false";
-  button.classList.remove("confirm-remove");
-  button.textContent = "Remove";
+  resetIconRemoveButton(button);
 }
 
 function confirmIconRemove(button, remove) {
   if (button.dataset.confirming !== "true") {
     button.dataset.confirming = "true";
     button.classList.add("confirm-remove");
-    button.textContent = "?";
+    button.title = "Click again to confirm delete";
+    button.setAttribute("aria-label", "Click again to confirm delete");
+    const icon = button.querySelector(".material-symbols-outlined");
+    if (icon) {
+      icon.textContent = "delete_forever";
+    } else {
+      button.textContent = "?";
+    }
     setTimeout(() => resetIconRemoveButton(button), 3000);
     return;
   }
@@ -588,7 +589,14 @@ function resetIconRemoveButton(button) {
 
   button.dataset.confirming = "false";
   button.classList.remove("confirm-remove");
-  button.textContent = "×";
+  button.title = "Delete";
+  button.setAttribute("aria-label", "Delete");
+  const icon = button.querySelector(".material-symbols-outlined");
+  if (icon) {
+    icon.textContent = "delete";
+  } else {
+    button.textContent = "×";
+  }
 }
 
 function fillForm(form, rule) {
@@ -1133,99 +1141,562 @@ function setRulesBackupStatus(message) {
   document.getElementById("rulesBackupStatus").textContent = message;
 }
 
-function renderTodos() {
-  const container = document.getElementById("todoList");
-  draftTodoCleanup?.();
-  draftTodoInput = null;
-  hideTagColorControl();
+let activeWorkspaceFilter = "all";
+let workspaceComposerType = "task";
+let workspaceComposerDraft = {
+  text: "",
+  title: "",
+  pinned: false
+};
 
-  if (!todos.length) {
-    container.className = "todo-list empty";
-    container.textContent = "No tasks yet.";
-    return;
-  }
+function setupWorkspaceListeners() {
+  const menuWrapper = document.querySelector(".create-menu-wrapper");
+  const createBtn = document.getElementById("createItemBtn");
+  const createDialog = document.getElementById("createTypeDialog");
+  const closeDialogBtn = document.getElementById("closeCreateTypeDialog");
+  let hoverTimeout = null;
 
-  container.className = "todo-list";
-  container.replaceChildren(...todos.map(renderTodo));
-}
-
-function startTodoDraft() {
-  if (draftTodoInput?.isConnected) {
-    draftTodoInput.focus();
-    return;
-  }
-
-  const container = document.getElementById("todoList");
-  const row = document.createElement("div");
-  const input = document.createElement("input");
-
-  container.className = "todo-list";
-  if (!todos.length) container.replaceChildren();
-
-  row.className = "todo-row editing draft";
-  input.type = "text";
-  input.className = "todo-edit-input";
-  input.placeholder = "Write a task or journey";
-  input.setAttribute("aria-label", "New task");
-
-  const stopDraftListeners = () => {
-    document.removeEventListener("pointerdown", handlePointerDown, true);
-    if (draftTodoCleanup === stopDraftListeners) draftTodoCleanup = null;
-  };
-
-  const finishDraft = () => {
-    stopDraftListeners();
-    saveTodoDraft(input);
-  };
-
-  function handlePointerDown(event) {
-    if (!row.contains(event.target)) finishDraft();
-  }
-
-  draftTodoCleanup = stopDraftListeners;
-  document.addEventListener("pointerdown", handlePointerDown, true);
-  input.addEventListener("blur", finishDraft);
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      input.blur();
+  menuWrapper?.addEventListener("mouseenter", () => {
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      hoverTimeout = null;
     }
+    toggleCreateTypeDialog(true);
+  });
 
-    if (event.key === "Escape") {
-      event.preventDefault();
-      removeTodoDraft(row);
+  menuWrapper?.addEventListener("mouseleave", () => {
+    hoverTimeout = setTimeout(() => {
+      toggleCreateTypeDialog(false);
+    }, 200);
+  });
+
+  createBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleCreateTypeDialog();
+  });
+
+  closeDialogBtn?.addEventListener("click", () => {
+    toggleCreateTypeDialog(false);
+  });
+
+  createDialog?.querySelectorAll(".create-type-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const type = card.dataset.type || "task";
+      toggleCreateTypeDialog(false);
+      openWorkspaceComposer(type);
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (createDialog && !createDialog.hidden && !event.target.closest(".create-menu-wrapper")) {
+      toggleCreateTypeDialog(false);
     }
   });
 
-  row.append(input);
-  container.append(row);
-  draftTodoInput = input;
-  input.focus();
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      if (createDialog && !createDialog.hidden) {
+        toggleCreateTypeDialog(false);
+        createBtn?.focus();
+      }
+    }
+  });
+
+  document.querySelectorAll(".workspace-filter-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const nextFilter = tab.dataset.filter;
+      if (nextFilter && nextFilter !== activeWorkspaceFilter) {
+        activeWorkspaceFilter = nextFilter;
+        try {
+          localStorage.setItem("aura_workspace_filter", nextFilter);
+        } catch {}
+        renderWorkspace();
+      }
+    });
+  });
+
+  try {
+    const savedFilter = localStorage.getItem("aura_workspace_filter");
+    if (["all", "task", "note", "list"].includes(savedFilter)) {
+      activeWorkspaceFilter = savedFilter;
+    }
+  } catch {}
 }
 
-async function saveTodoDraft(input) {
-  if (!input.isConnected || input.dataset.saving === "true") return;
+function toggleCreateTypeDialog(force) {
+  const dialog = document.getElementById("createTypeDialog");
+  const btn = document.getElementById("createItemBtn");
+  if (!dialog || !btn) return;
 
-  const text = input.value.trim();
-  if (!text) {
-    removeTodoDraft(input.closest(".todo-row"));
+  const shouldOpen = typeof force === "boolean" ? force : dialog.hidden;
+  dialog.hidden = !shouldOpen;
+  btn.setAttribute("aria-expanded", String(shouldOpen));
+}
+
+function openWorkspaceComposer(type = "task") {
+  workspaceComposerType = type;
+  const composer = document.getElementById("workspaceComposer");
+  if (!composer) return;
+
+  composer.hidden = false;
+  renderWorkspaceComposer();
+  composer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function closeWorkspaceComposer() {
+  const composer = document.getElementById("workspaceComposer");
+  if (composer) {
+    composer.hidden = true;
+    composer.replaceChildren();
+  }
+  workspaceComposerDraft = { text: "", title: "", pinned: false };
+}
+
+function captureCurrentComposerDraft() {
+  if (workspaceComposerType === "task") {
+    const input = document.getElementById("composerTaskInput");
+    if (input) workspaceComposerDraft.text = input.value;
+  } else if (workspaceComposerType === "note") {
+    const textarea = document.getElementById("composerNoteInput");
+    const pinned = document.getElementById("composerNotePinned");
+    if (textarea) workspaceComposerDraft.text = textarea.value;
+    if (pinned) workspaceComposerDraft.pinned = pinned.checked;
+  } else if (workspaceComposerType === "list") {
+    const title = document.getElementById("composerListTitle");
+    const textarea = document.getElementById("composerListItems");
+    if (title) workspaceComposerDraft.title = title.value;
+    if (textarea) workspaceComposerDraft.text = textarea.value;
+  }
+}
+
+function renderWorkspaceComposer() {
+  const composer = document.getElementById("workspaceComposer");
+  if (!composer) return;
+
+  composer.innerHTML = `
+    <div class="composer-header">
+      <div class="composer-type-selector">
+        <span class="composer-prompt-label">Creating:</span>
+        <div class="composer-type-pills" role="tablist" aria-label="Creation type">
+          <button type="button" class="composer-type-pill ${workspaceComposerType === "task" ? "active" : ""}" data-type="task">
+            <span>✦</span> Task
+          </button>
+          <button type="button" class="composer-type-pill ${workspaceComposerType === "note" ? "active" : ""}" data-type="note">
+            <span>📝</span> Note
+          </button>
+          <button type="button" class="composer-type-pill ${workspaceComposerType === "list" ? "active" : ""}" data-type="list">
+            <span>📋</span> List
+          </button>
+        </div>
+      </div>
+      <button id="closeComposerBtn" type="button" class="icon-button close-composer-btn" title="Cancel (Esc)" aria-label="Cancel creation"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="composer-body">
+      ${getComposerBodyHtml(workspaceComposerType)}
+    </div>
+    <div class="composer-actions">
+      <button id="composerCancelBtn" type="button" class="secondary-button">Cancel</button>
+      <button id="composerSaveBtn" type="button" class="primary-button">
+        ${workspaceComposerType === "task" ? "Add task" : workspaceComposerType === "note" ? "Save note" : "Save list"}
+      </button>
+    </div>
+  `;
+
+  composer.querySelectorAll(".composer-type-pill").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      const nextType = pill.dataset.type;
+      if (nextType && nextType !== workspaceComposerType) {
+        captureCurrentComposerDraft();
+        workspaceComposerType = nextType;
+        renderWorkspaceComposer();
+      }
+    });
+  });
+
+  document.getElementById("closeComposerBtn")?.addEventListener("click", closeWorkspaceComposer);
+  document.getElementById("composerCancelBtn")?.addEventListener("click", closeWorkspaceComposer);
+  document.getElementById("composerSaveBtn")?.addEventListener("click", saveComposerItem);
+
+  attachComposerKeyboardAndFocus();
+}
+
+function getComposerBodyHtml(type) {
+  if (type === "task") {
+    const value = workspaceComposerDraft.text || workspaceComposerDraft.title || "";
+    return `
+      <div class="composer-field-group">
+        <input id="composerTaskInput" class="todo-edit-input" type="text" placeholder="Write a task or journey (e.g. Outline draft -> Review #work)" aria-label="Task text" value="${escapeHtml(value)}">
+        <div class="composer-hint">
+          <span>Tip: Use <code>#tag</code> for color tags, or <code>-&gt;</code> to make journey steps. Press <kbd>Enter</kbd> to add.</span>
+        </div>
+      </div>
+    `;
+  }
+  if (type === "note") {
+    const value = workspaceComposerDraft.text || workspaceComposerDraft.title || "";
+    return `
+      <div class="composer-field-group">
+        <textarea id="composerNoteInput" class="composer-textarea" placeholder="Write a quiet thought, reminder, or decision..." aria-label="Note body" rows="3">${escapeHtml(value)}</textarea>
+        <div class="composer-meta-row">
+          <label class="inline-check">
+            <input id="composerNotePinned" type="checkbox" ${workspaceComposerDraft.pinned ? "checked" : ""}> Pin note to top
+          </label>
+          <span class="composer-hint">Press <kbd>Ctrl+Enter</kbd> to save.</span>
+        </div>
+      </div>
+    `;
+  }
+  if (type === "list") {
+    const title = workspaceComposerDraft.title || "";
+    const items = workspaceComposerDraft.text || "";
+    return `
+      <div class="composer-field-group">
+        <input id="composerListTitle" class="composer-input" type="text" placeholder="List name (e.g. Useful resources, Reading list)" aria-label="List title" value="${escapeHtml(title)}">
+        <textarea id="composerListItems" class="composer-textarea" placeholder="One bullet item per line..." aria-label="List items" rows="4">${escapeHtml(items)}</textarea>
+        <div class="composer-meta-row">
+          <span class="composer-hint">Press <kbd>Ctrl+Enter</kbd> to save.</span>
+        </div>
+      </div>
+    `;
+  }
+  return "";
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function attachComposerKeyboardAndFocus() {
+  if (workspaceComposerType === "task") {
+    const input = document.getElementById("composerTaskInput");
+    if (input) {
+      input.focus();
+      input.selectionStart = input.selectionEnd = input.value.length;
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveComposerItem();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeWorkspaceComposer();
+        }
+      });
+    }
+  } else if (workspaceComposerType === "note") {
+    const textarea = document.getElementById("composerNoteInput");
+    if (textarea) {
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+      textarea.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          saveComposerItem();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeWorkspaceComposer();
+        }
+      });
+    }
+  } else if (workspaceComposerType === "list") {
+    const titleInput = document.getElementById("composerListTitle");
+    const itemsTextarea = document.getElementById("composerListItems");
+    if (titleInput) {
+      titleInput.focus();
+      titleInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          itemsTextarea?.focus();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeWorkspaceComposer();
+        }
+      });
+    }
+    if (itemsTextarea) {
+      itemsTextarea.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          saveComposerItem();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeWorkspaceComposer();
+        }
+      });
+    }
+  }
+}
+
+async function saveComposerItem() {
+  if (workspaceComposerType === "task") {
+    const input = document.getElementById("composerTaskInput");
+    const text = input?.value.trim();
+    if (!text) return;
+
+    todos.push({ id: createRuleId(), text, done: false });
+    await saveTodos(todos);
+    if (activeWorkspaceFilter !== "all" && activeWorkspaceFilter !== "task") {
+      activeWorkspaceFilter = "task";
+      try {
+        localStorage.setItem("aura_workspace_filter", "task");
+      } catch {}
+    }
+    closeWorkspaceComposer();
+    renderWorkspace();
+  } else if (workspaceComposerType === "note") {
+    const input = document.getElementById("composerNoteInput");
+    const pinnedInput = document.getElementById("composerNotePinned");
+    const body = input?.value.trim();
+    if (!body) return;
+
+    const pinned = Boolean(pinnedInput?.checked);
+    notes.unshift({ id: createRuleId(), body, pinned, updatedAt: Date.now() });
+    await saveNotes(notes);
+    if (activeWorkspaceFilter !== "all" && activeWorkspaceFilter !== "note") {
+      activeWorkspaceFilter = "note";
+      try {
+        localStorage.setItem("aura_workspace_filter", "note");
+      } catch {}
+    }
+    closeWorkspaceComposer();
+    renderWorkspace();
+  } else if (workspaceComposerType === "list") {
+    const titleInput = document.getElementById("composerListTitle");
+    const itemsInput = document.getElementById("composerListItems");
+    const title = titleInput?.value.trim();
+    const items = (itemsInput?.value || "")
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((text) => ({ id: createRuleId(), text }));
+
+    if (!title && !items.length) return;
+
+    lists.unshift({
+      id: createRuleId(),
+      title: title || "Untitled list",
+      items,
+      updatedAt: Date.now()
+    });
+    await saveLists(lists);
+    if (activeWorkspaceFilter !== "all" && activeWorkspaceFilter !== "list") {
+      activeWorkspaceFilter = "list";
+      try {
+        localStorage.setItem("aura_workspace_filter", "list");
+      } catch {}
+    }
+    closeWorkspaceComposer();
+    renderWorkspace();
+  }
+}
+
+function renderWorkspace() {
+  const content = document.getElementById("workspaceContent");
+  if (!content) return;
+
+  hideTagColorControl();
+
+  const totalCount = todos.length + notes.length + lists.length;
+  const countAll = document.getElementById("workspaceCountAll");
+  const countTasks = document.getElementById("workspaceCountTasks");
+  const countNotes = document.getElementById("workspaceCountNotes");
+  const countLists = document.getElementById("workspaceCountLists");
+
+  if (countAll) countAll.textContent = totalCount;
+  if (countTasks) countTasks.textContent = todos.length;
+  if (countNotes) countNotes.textContent = notes.length;
+  if (countLists) countLists.textContent = lists.length;
+
+  document.querySelectorAll(".workspace-filter-tab").forEach((tab) => {
+    const isActive = tab.dataset.filter === activeWorkspaceFilter;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  if (totalCount === 0) {
+    content.replaceChildren(createWorkspaceEmptyState());
     return;
   }
 
-  input.dataset.saving = "true";
-  todos.push({ id: createRuleId(), text, done: false });
-  await saveTodos(todos);
-  renderTodos();
+  const currentCount =
+    activeWorkspaceFilter === "all"
+      ? totalCount
+      : activeWorkspaceFilter === "task"
+      ? todos.length
+      : activeWorkspaceFilter === "note"
+      ? notes.length
+      : lists.length;
+
+  if (currentCount === 0) {
+    content.replaceChildren(createFilterEmptyState(activeWorkspaceFilter));
+    return;
+  }
+
+  content.replaceChildren();
+
+  const sortedNotes = [...notes].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || (b.updatedAt || 0) - (a.updatedAt || 0)
+  );
+
+  if (activeWorkspaceFilter === "all") {
+    if (todos.length > 0) {
+      const taskSection = document.createElement("div");
+      taskSection.className = "workspace-category-block";
+
+      const header = document.createElement("div");
+      header.className = "workspace-section-header";
+      header.innerHTML = `
+        <div class="section-title">
+          <span class="section-icon">✦</span>
+          <span>Tasks</span>
+          <span class="section-badge">${todos.length}</span>
+        </div>
+      `;
+
+      const listContainer = document.createElement("div");
+      listContainer.id = "todoList";
+      listContainer.className = "todo-list";
+      listContainer.replaceChildren(...todos.map(renderTodo));
+
+      taskSection.append(header, listContainer);
+      content.append(taskSection);
+    }
+
+    if (notes.length > 0) {
+      const noteSection = document.createElement("div");
+      noteSection.className = "workspace-category-block";
+
+      const header = document.createElement("div");
+      header.className = "workspace-section-header";
+      header.innerHTML = `
+        <div class="section-title">
+          <span class="section-icon">📝</span>
+          <span>Notes</span>
+          <span class="section-badge">${notes.length}</span>
+        </div>
+      `;
+
+      const listContainer = document.createElement("div");
+      listContainer.id = "notesList";
+      listContainer.className = "notes-list";
+      listContainer.replaceChildren(...sortedNotes.map(renderNote));
+
+      noteSection.append(header, listContainer);
+      content.append(noteSection);
+    }
+
+    if (lists.length > 0) {
+      const listSection = document.createElement("div");
+      listSection.className = "workspace-category-block";
+
+      const header = document.createElement("div");
+      header.className = "workspace-section-header";
+      header.innerHTML = `
+        <div class="section-title">
+          <span class="section-icon">📋</span>
+          <span>Lists</span>
+          <span class="section-badge">${lists.length}</span>
+        </div>
+      `;
+
+      const listContainer = document.createElement("div");
+      listContainer.id = "listsList";
+      listContainer.className = "lists-list";
+      listContainer.replaceChildren(...lists.map(renderList));
+
+      listSection.append(header, listContainer);
+      content.append(listSection);
+    }
+  } else if (activeWorkspaceFilter === "task") {
+    const listContainer = document.createElement("div");
+    listContainer.id = "todoList";
+    listContainer.className = "todo-list";
+    listContainer.replaceChildren(...todos.map(renderTodo));
+    content.append(listContainer);
+  } else if (activeWorkspaceFilter === "note") {
+    const listContainer = document.createElement("div");
+    listContainer.id = "notesList";
+    listContainer.className = "notes-list";
+    listContainer.replaceChildren(...sortedNotes.map(renderNote));
+    content.append(listContainer);
+  } else if (activeWorkspaceFilter === "list") {
+    const listContainer = document.createElement("div");
+    listContainer.id = "listsList";
+    listContainer.className = "lists-list";
+    listContainer.replaceChildren(...lists.map(renderList));
+    content.append(listContainer);
+  }
+}
+
+function createWorkspaceEmptyState() {
+  const container = document.createElement("div");
+  container.className = "workspace-empty-state";
+  container.innerHTML = `
+    <div class="workspace-empty-icon">✦</div>
+    <h3>Your workspace is quiet</h3>
+    <p>What would you like to create?</p>
+    <div class="workspace-empty-actions">
+      <button type="button" class="secondary-button empty-create-btn" data-type="task">
+        <span>✦</span> Task
+      </button>
+      <button type="button" class="secondary-button empty-create-btn" data-type="note">
+        <span>📝</span> Note
+      </button>
+      <button type="button" class="secondary-button empty-create-btn" data-type="list">
+        <span>📋</span> List
+      </button>
+    </div>
+  `;
+  container.querySelectorAll(".empty-create-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openWorkspaceComposer(btn.dataset.type);
+    });
+  });
+  return container;
+}
+
+function createFilterEmptyState(filter) {
+  const labels = {
+    task: { title: "No tasks yet", prompt: "Capture a task or journey to keep your focus loop visible.", btn: "<span>✦</span> Create task" },
+    note: { title: "No notes yet", prompt: "Write a quiet thought or reminder beside your focus loop.", btn: "<span>📝</span> Create note" },
+    list: { title: "No lists yet", prompt: "Create a bullet list for links, references, or items.", btn: "<span>📋</span> Create list" }
+  };
+  const info = labels[filter] || labels.task;
+  const container = document.createElement("div");
+  container.className = "workspace-empty-state compact";
+  container.innerHTML = `
+    <h3>${info.title}</h3>
+    <p>${info.prompt}</p>
+    <div class="workspace-empty-actions">
+      <button type="button" class="secondary-button empty-create-btn" data-type="${filter}">
+        ${info.btn}
+      </button>
+    </div>
+  `;
+  container.querySelector(".empty-create-btn").addEventListener("click", () => {
+    openWorkspaceComposer(filter);
+  });
+  return container;
+}
+
+function renderTodos() {
+  renderWorkspace();
+}
+
+function startTodoDraft() {
+  openWorkspaceComposer("task");
+}
+
+function saveTodoDraft(input) {
+  saveComposerItem();
 }
 
 function removeTodoDraft(row) {
-  draftTodoCleanup?.();
-  draftTodoInput = null;
-  row?.remove();
-
-  if (!todos.length) {
-    renderTodos();
-  }
+  closeWorkspaceComposer();
 }
 
 function renderTodo(todo) {
@@ -1240,13 +1711,16 @@ function renderTodo(todo) {
   row.draggable = true;
   row.dataset.id = todo.id;
   actions.className = "todo-actions";
-  edit.className = "secondary-button";
+  edit.className = "icon-button";
   edit.type = "button";
-  edit.textContent = "Edit";
+  edit.title = "Edit task";
+  edit.setAttribute("aria-label", `Edit ${todo.text}`);
+  edit.innerHTML = `<span class="material-symbols-outlined">edit</span>`;
   remove.className = "icon-button danger";
   remove.type = "button";
-  remove.textContent = "×";
-  remove.setAttribute("aria-label", `Remove ${todo.text}`);
+  remove.title = "Delete task";
+  remove.setAttribute("aria-label", `Delete ${todo.text}`);
+  remove.innerHTML = `<span class="material-symbols-outlined">delete</span>`;
 
   edit.addEventListener("click", () => renderTodoEditor(row, todo));
   row.addEventListener("dragstart", handleTodoDragStart);
@@ -1526,28 +2000,11 @@ function colorToSoftBackground(color) {
 }
 
 async function addNote() {
-  const bodyInput = document.getElementById("noteBody");
-  const body = bodyInput.value.trim();
-  if (!body) return;
-
-  notes.unshift({ id: createRuleId(), body, pinned: false, updatedAt: Date.now() });
-  bodyInput.value = "";
-  await saveNotes(notes);
-  renderNotes();
+  openWorkspaceComposer("note");
 }
 
 function renderNotes() {
-  const container = document.getElementById("notesList");
-  const sortedNotes = [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.updatedAt || 0) - (a.updatedAt || 0));
-
-  if (!sortedNotes.length) {
-    container.className = "notes-list empty";
-    container.textContent = "No notes yet.";
-    return;
-  }
-
-  container.className = "notes-list";
-  container.replaceChildren(...sortedNotes.map(renderNote));
+  renderWorkspace();
 }
 
 function renderNote(note) {
@@ -1564,15 +2021,20 @@ function renderNote(note) {
   body.textContent = note.body || note.title || "No note text.";
   actions.className = "note-actions";
   pin.type = "button";
-  pin.className = "secondary-button";
-  pin.textContent = note.pinned ? "Unpin" : "Pin";
+  pin.className = `icon-button pin-button${note.pinned ? " pinned" : ""}`;
+  pin.title = note.pinned ? "Unpin note" : "Pin note";
+  pin.setAttribute("aria-label", note.pinned ? "Unpin note" : "Pin note");
+  pin.innerHTML = `<span class="material-symbols-outlined${note.pinned ? " fill" : ""}">push_pin</span>`;
   edit.type = "button";
-  edit.className = "secondary-button";
-  edit.textContent = "Edit";
+  edit.className = "icon-button";
+  edit.title = "Edit note";
+  edit.setAttribute("aria-label", "Edit note");
+  edit.innerHTML = `<span class="material-symbols-outlined">edit</span>`;
   remove.type = "button";
   remove.className = "icon-button danger";
-  remove.textContent = "×";
-  remove.setAttribute("aria-label", "Remove note");
+  remove.title = "Delete note";
+  remove.setAttribute("aria-label", "Delete note");
+  remove.innerHTML = `<span class="material-symbols-outlined">delete</span>`;
 
   pin.addEventListener("click", async () => {
     note.pinned = !note.pinned;
@@ -1624,34 +2086,11 @@ function renderNoteEditor(card, note) {
 }
 
 async function addList() {
-  const titleInput = document.getElementById("listTitle");
-  const itemsInput = document.getElementById("listItems");
-  const title = titleInput.value.trim();
-  const items = itemsInput.value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((text) => ({ id: createRuleId(), text }));
-  if (!title && !items.length) return;
-
-  lists.unshift({ id: createRuleId(), title: title || "Untitled list", items, updatedAt: Date.now() });
-  titleInput.value = "";
-  itemsInput.value = "";
-  await saveLists(lists);
-  renderLists();
+  openWorkspaceComposer("list");
 }
 
 function renderLists() {
-  const container = document.getElementById("listsList");
-
-  if (!lists.length) {
-    container.className = "lists-list empty";
-    container.textContent = "No lists yet.";
-    return;
-  }
-
-  container.className = "lists-list";
-  container.replaceChildren(...lists.map(renderList));
+  renderWorkspace();
 }
 
 function renderList(list) {
@@ -1659,7 +2098,6 @@ function renderList(list) {
   const header = document.createElement("div");
   const title = document.createElement("h3");
   const actions = document.createElement("div");
-  const addItem = document.createElement("button");
   const edit = document.createElement("button");
   const remove = document.createElement("button");
   const items = document.createElement("ul");
@@ -1669,20 +2107,19 @@ function renderList(list) {
   header.className = "list-card-header";
   title.textContent = list.title;
   actions.className = "list-actions";
-  addItem.type = "button";
-  addItem.className = "secondary-button";
-  addItem.textContent = "Add item";
   edit.type = "button";
-  edit.className = "secondary-button";
-  edit.textContent = "Edit";
+  edit.className = "icon-button";
+  edit.title = "Edit list";
+  edit.setAttribute("aria-label", `Edit ${list.title}`);
+  edit.innerHTML = `<span class="material-symbols-outlined">edit</span>`;
   remove.type = "button";
   remove.className = "icon-button danger";
-  remove.textContent = "×";
-  remove.setAttribute("aria-label", `Remove ${list.title}`);
+  remove.title = "Delete list";
+  remove.setAttribute("aria-label", `Delete ${list.title}`);
+  remove.innerHTML = `<span class="material-symbols-outlined">delete</span>`;
   items.className = "list-items";
 
   listItems.forEach((item) => items.append(renderListItem(item)));
-  addItem.addEventListener("click", () => renderListEditor(card, list, true));
   edit.addEventListener("click", () => renderListEditor(card, list));
   remove.addEventListener("click", () => confirmIconRemove(remove, async () => {
     lists = lists.filter((candidate) => candidate.id !== list.id);
@@ -1690,7 +2127,7 @@ function renderList(list) {
     renderLists();
   }));
 
-  actions.append(addItem, edit, remove);
+  actions.append(edit, remove);
   header.append(title, actions);
   card.append(header, items);
   return card;
@@ -1709,7 +2146,7 @@ function renderListItem(item) {
   return bullet;
 }
 
-function renderListEditor(card, list, startAddingItem = false) {
+function renderListEditor(card, list) {
   const title = document.createElement("input");
   const items = document.createElement("textarea");
   const actions = document.createElement("div");
@@ -1721,7 +2158,7 @@ function renderListEditor(card, list, startAddingItem = false) {
   title.value = list.title || "";
   title.placeholder = "List name";
   title.setAttribute("aria-label", "List name");
-  items.value = startAddingItem && itemText ? `${itemText}\n` : itemText;
+  items.value = itemText;
   items.placeholder = "One bullet per line";
   items.setAttribute("aria-label", "List items");
   actions.className = "list-actions";
@@ -1753,14 +2190,9 @@ function renderListEditor(card, list, startAddingItem = false) {
   card.className = "list-card editing";
   card.replaceChildren(title, items, actions);
 
-  if (startAddingItem) {
-    items.focus();
-    items.selectionStart = items.selectionEnd = items.value.length;
-    return;
-  }
-
-  title.focus();
-  title.select();
+  // Focus on the list items textarea by default
+  items.focus();
+  items.selectionStart = items.selectionEnd = items.value.length;
 }
 
 function renderTodoEditor(row, todo) {

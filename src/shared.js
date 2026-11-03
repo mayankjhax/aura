@@ -300,94 +300,114 @@ function usageKeyMatchesParsedPatterns(key, parsedPatterns) {
   });
 }
 
+async function getStorageItem(key, fallback = null) {
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    try {
+      const stored = await chrome.storage.local.get(key);
+      return stored[key] !== undefined ? stored[key] : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  try {
+    const raw = localStorage.getItem(key);
+    return raw !== null ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function setStorageItem(key, value) {
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    try {
+      await chrome.storage.local.set({ [key]: value });
+      return;
+    } catch {}
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
 async function getSettings() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.SETTINGS);
-  return { ...DEFAULT_SETTINGS, ...(stored[STORAGE_KEYS.SETTINGS] || {}) };
+  const stored = (await getStorageItem(STORAGE_KEYS.SETTINGS)) || {};
+  return { ...DEFAULT_SETTINGS, ...stored };
 }
 
 async function saveSettings(settings) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: settings });
+  await setStorageItem(STORAGE_KEYS.SETTINGS, settings);
 }
 
 async function getUsage() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.USAGE);
-  return stored[STORAGE_KEYS.USAGE] || {};
+  return (await getStorageItem(STORAGE_KEYS.USAGE)) || {};
 }
 
 async function saveUsage(usage) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.USAGE]: usage });
+  await setStorageItem(STORAGE_KEYS.USAGE, usage);
 }
 
 async function getPathUsage() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.PATH_USAGE);
-  return stored[STORAGE_KEYS.PATH_USAGE] || {};
+  return (await getStorageItem(STORAGE_KEYS.PATH_USAGE)) || {};
 }
 
 async function savePathUsage(usage) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.PATH_USAGE]: usage });
+  await setStorageItem(STORAGE_KEYS.PATH_USAGE, usage);
 }
 
 async function getTodos() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.TODOS);
-  return stored[STORAGE_KEYS.TODOS] || [];
+  return (await getStorageItem(STORAGE_KEYS.TODOS)) || [];
 }
 
 async function saveTodos(todos) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.TODOS]: todos });
+  await setStorageItem(STORAGE_KEYS.TODOS, todos);
 }
 
 async function getTagColors() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.TAG_COLORS);
-  return stored[STORAGE_KEYS.TAG_COLORS] || {};
+  return (await getStorageItem(STORAGE_KEYS.TAG_COLORS)) || {};
 }
 
 async function saveTagColors(tagColors) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.TAG_COLORS]: tagColors });
+  await setStorageItem(STORAGE_KEYS.TAG_COLORS, tagColors);
 }
 
 async function getNotes() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.NOTES);
-  return stored[STORAGE_KEYS.NOTES] || [];
+  return (await getStorageItem(STORAGE_KEYS.NOTES)) || [];
 }
 
 async function saveNotes(notes) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.NOTES]: notes });
+  await setStorageItem(STORAGE_KEYS.NOTES, notes);
 }
 
 async function getLists() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.LISTS);
-  return stored[STORAGE_KEYS.LISTS] || [];
+  return (await getStorageItem(STORAGE_KEYS.LISTS)) || [];
 }
 
 async function saveLists(lists) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.LISTS]: lists });
+  await setStorageItem(STORAGE_KEYS.LISTS, lists);
 }
 
 async function getFocusUsage() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.FOCUS_USAGE);
-  return stored[STORAGE_KEYS.FOCUS_USAGE] || {};
+  return (await getStorageItem(STORAGE_KEYS.FOCUS_USAGE)) || {};
 }
 
 async function saveFocusUsage(usage) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.FOCUS_USAGE]: usage });
+  await setStorageItem(STORAGE_KEYS.FOCUS_USAGE, usage);
 }
 
 async function getFocusSession() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.FOCUS_SESSION);
-  return stored[STORAGE_KEYS.FOCUS_SESSION] || null;
+  return await getStorageItem(STORAGE_KEYS.FOCUS_SESSION, null);
 }
 
 async function saveFocusSession(session) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.FOCUS_SESSION]: session });
+  await setStorageItem(STORAGE_KEYS.FOCUS_SESSION, session);
 }
 
 async function getReminderState() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.REMINDER_STATE);
-  return stored[STORAGE_KEYS.REMINDER_STATE] || {};
+  return (await getStorageItem(STORAGE_KEYS.REMINDER_STATE)) || {};
 }
 
 async function saveReminderState(state) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.REMINDER_STATE]: state });
+  await setStorageItem(STORAGE_KEYS.REMINDER_STATE, state);
 }
 
 function addElapsedByDay(usage, startedAt, endedAt) {

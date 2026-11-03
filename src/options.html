@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Aura Settings</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -53,9 +56,9 @@
                 <strong id="focusToday">0s</strong>
               </div>
               <div class="week-nav">
-                <button id="focusPrevWeek" type="button" class="week-nav-btn" title="Previous week" aria-label="Previous week">‹</button>
+                <button id="focusPrevWeek" type="button" class="week-nav-btn" title="Previous week" aria-label="Previous week"><span class="material-symbols-outlined">chevron_left</span></button>
                 <span id="focusWeekRange" class="week-nav-label">This week</span>
-                <button id="focusNextWeek" type="button" class="week-nav-btn" title="Next week" aria-label="Next week" disabled>›</button>
+                <button id="focusNextWeek" type="button" class="week-nav-btn" title="Next week" aria-label="Next week" disabled><span class="material-symbols-outlined">chevron_right</span></button>
               </div>
             </div>
             <div id="focusGraph" class="focus-graph" aria-label="Focus time this week">
@@ -64,44 +67,75 @@
           </div>
         </section>
 
-        <section class="panel todo-panel">
+        <section class="panel workspace-panel productivity-section">
           <div class="panel-heading">
             <div>
-              <h2>Tasks</h2>
-              <p>Capture the next small step and keep your focus loop visible.</p>
+              <h2>Workspace</h2>
+              <p>Tasks, notes, and lists to keep your focus loop organized.</p>
             </div>
-            <button id="addTodo" type="button">Add</button>
+            <div class="workspace-header-actions">
+              <div class="create-menu-wrapper">
+                <button id="createItemBtn" class="create-item-btn icon-button add-button" type="button" aria-haspopup="dialog" aria-expanded="false" title="Create a task, note, or list" aria-label="Create a task, note, or list">
+                  <span class="material-symbols-outlined">add</span>
+                </button>
+                <div id="createTypeDialog" class="create-type-dialog" role="dialog" aria-label="What do you want to create?" hidden>
+                  <div class="create-type-header">
+                    <span class="create-type-title">What do you want to create?</span>
+                    <button id="closeCreateTypeDialog" type="button" class="icon-button close-dialog-btn" title="Close dialog" aria-label="Close dialog"><span class="material-symbols-outlined">close</span></button>
+                  </div>
+                  <div class="create-type-options">
+                    <button type="button" class="create-type-card" data-type="task">
+                      <div class="create-type-icon-wrapper">
+                        <span class="create-type-icon">✦</span>
+                      </div>
+                      <div class="create-type-info">
+                        <strong>Task</strong>
+                        <span>Actionable item with #tags or journeys (→)</span>
+                      </div>
+                    </button>
+                    <button type="button" class="create-type-card" data-type="note">
+                      <div class="create-type-icon-wrapper">
+                        <span class="create-type-icon">📝</span>
+                      </div>
+                      <div class="create-type-info">
+                        <strong>Note</strong>
+                        <span>Quick thought, reminder, or memo</span>
+                      </div>
+                    </button>
+                    <button type="button" class="create-type-card" data-type="list">
+                      <div class="create-type-icon-wrapper">
+                        <span class="create-type-icon">📋</span>
+                      </div>
+                      <div class="create-type-info">
+                        <strong>List</strong>
+                        <span>Bulleted collection or checklist</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div id="todoList" class="todo-list empty">No tasks yet.</div>
-        </section>
 
-        <section class="panel notes-panel productivity-section">
-          <div class="panel-heading">
-            <div>
-              <h2>Notes</h2>
-              <p>Keep low-friction thoughts beside your rules, without opening another app.</p>
+          <div class="workspace-filter-bar">
+            <div class="workspace-filter-tabs" role="tablist" aria-label="Filter workspace items">
+              <button id="workspaceFilterAll" type="button" class="workspace-filter-tab active" data-filter="all" role="tab" aria-selected="true">
+                All <span id="workspaceCountAll" class="filter-count">0</span>
+              </button>
+              <button id="workspaceFilterTasks" type="button" class="workspace-filter-tab" data-filter="task" role="tab" aria-selected="false">
+                Tasks <span id="workspaceCountTasks" class="filter-count">0</span>
+              </button>
+              <button id="workspaceFilterNotes" type="button" class="workspace-filter-tab" data-filter="note" role="tab" aria-selected="false">
+                Notes <span id="workspaceCountNotes" class="filter-count">0</span>
+              </button>
+              <button id="workspaceFilterLists" type="button" class="workspace-filter-tab" data-filter="list" role="tab" aria-selected="false">
+                Lists <span id="workspaceCountLists" class="filter-count">0</span>
+              </button>
             </div>
-            <button id="addNote" type="button">Add note</button>
           </div>
-          <div class="note-compose">
-            <textarea id="noteBody" placeholder="Write a quiet thought, reminder, or decision..." aria-label="Note body"></textarea>
-          </div>
-          <div id="notesList" class="notes-list empty">No notes yet.</div>
-        </section>
 
-        <section class="panel lists-panel productivity-section">
-          <div class="panel-heading">
-            <div>
-              <h2>Lists</h2>
-              <p>Capture normal bullet lists for references, ideas, or grouped reminders.</p>
-            </div>
-            <button id="addList" type="button">Add list</button>
-          </div>
-          <div class="list-compose">
-            <input id="listTitle" type="text" placeholder="List name" aria-label="List name">
-            <textarea id="listItems" placeholder="One bullet per line" aria-label="List items"></textarea>
-          </div>
-          <div id="listsList" class="lists-list empty">No lists yet.</div>
+          <div id="workspaceComposer" class="workspace-composer" hidden></div>
+          <div id="workspaceContent" class="workspace-content"></div>
         </section>
       </div>
 
@@ -149,9 +183,9 @@
                 <span id="dailyUsageTotal" class="daily-usage-total">0s total</span>
               </div>
               <div class="week-nav">
-                <button id="dailyUsagePrevWeek" type="button" class="week-nav-btn" title="Previous week" aria-label="Previous week">‹</button>
+                <button id="dailyUsagePrevWeek" type="button" class="week-nav-btn" title="Previous week" aria-label="Previous week"><span class="material-symbols-outlined">chevron_left</span></button>
                 <span id="dailyUsageWeekRange" class="week-nav-label">This week</span>
-                <button id="dailyUsageNextWeek" type="button" class="week-nav-btn" title="Next week" aria-label="Next week" disabled>›</button>
+                <button id="dailyUsageNextWeek" type="button" class="week-nav-btn" title="Next week" aria-label="Next week" disabled><span class="material-symbols-outlined">chevron_right</span></button>
               </div>
             </div>
             <div id="dailyUsageGraph" class="focus-graph" aria-label="Daily usage this week">
@@ -169,7 +203,7 @@
               <h2>Tab limits</h2>
               <p>Close overflow tabs globally or for specific sites.</p>
             </div>
-            <button id="addTabRule" type="button">Add</button>
+            <button id="addTabRule" class="icon-button add-button" type="button" title="Add tab limit rule" aria-label="Add tab limit rule"><span class="material-symbols-outlined">add</span></button>
           </div>
           <div class="global-tab-limits rule-card">
             <div class="split-fields">
@@ -192,7 +226,7 @@
               <h2>Time limits</h2>
               <p>Redirect sites once their daily, weekly, or monthly budget is used.</p>
             </div>
-            <button id="addTimeRule" type="button">Add</button>
+            <button id="addTimeRule" class="icon-button add-button" type="button" title="Add time limit rule" aria-label="Add time limit rule"><span class="material-symbols-outlined">add</span></button>
           </div>
           <div id="timeRules" class="rule-list"></div>
         </article>
@@ -203,7 +237,7 @@
               <h2>Allowed schedules</h2>
               <p>Allow selected site groups only on chosen weekdays and local times.</p>
             </div>
-            <button id="addScheduleRule" type="button">Add</button>
+            <button id="addScheduleRule" class="icon-button add-button" type="button" title="Add schedule rule" aria-label="Add schedule rule"><span class="material-symbols-outlined">add</span></button>
           </div>
           <div id="scheduleRules" class="rule-list"></div>
         </article>
@@ -214,7 +248,7 @@
               <h2>Reminders</h2>
               <p>Pause playing media and show a break reminder after spending time on specific sites.</p>
             </div>
-            <button id="addReminderRule" type="button">Add</button>
+            <button id="addReminderRule" class="icon-button add-button" type="button" title="Add reminder rule" aria-label="Add reminder rule"><span class="material-symbols-outlined">add</span></button>
           </div>
           <div id="reminderRules" class="rule-list"></div>
         </article>
@@ -242,7 +276,7 @@
                 <div id="emojiPickerGroup" class="emoji-picker-group">
                   <div id="emojiPickerBtn" class="emoji-button" role="button" tabindex="0" aria-label="Choose toolbar icon emoji" aria-haspopup="dialog" aria-expanded="false" title="Click to choose toolbar icon emoji">
                     <span id="emojiDisplay" class="emoji-char">🎯</span>
-                    <button id="clearIconEmoji" type="button" class="emoji-clear-badge" title="Reset to default icon" aria-label="Reset to default icon">×</button>
+                    <button id="clearIconEmoji" type="button" class="emoji-clear-badge" title="Reset to default icon" aria-label="Reset to default icon"><span class="material-symbols-outlined" style="font-size: 13px;">close</span></button>
                   </div>
                   <div id="emojiPopup" class="emoji-popup" role="dialog" aria-label="Select an emoji" hidden>
                     <div class="emoji-popup-header">
@@ -295,7 +329,7 @@
             <span class="toggle-track" aria-hidden="true"></span>
           </label>
           <input name="name" placeholder="Name, e.g., Social sites" aria-label="Name" required>
-          <button class="danger remove-button" type="button" data-remove>Remove</button>
+          <button class="icon-button danger remove-button" type="button" data-remove title="Delete rule" aria-label="Delete rule"><span class="material-symbols-outlined">delete</span></button>
         </div>
         <textarea name="patterns" placeholder="Sites, e.g., x.com, www.google.com/search, *.youtube.com" aria-label="Sites" required></textarea>
         <div class="split-fields">
@@ -322,7 +356,7 @@
             <span class="toggle-track" aria-hidden="true"></span>
           </label>
           <input name="name" placeholder="Name, e.g., Entertainment" aria-label="Name" required>
-          <button class="danger remove-button" type="button" data-remove>Remove</button>
+          <button class="icon-button danger remove-button" type="button" data-remove title="Delete rule" aria-label="Delete rule"><span class="material-symbols-outlined">delete</span></button>
         </div>
         <textarea name="patterns" placeholder="Sites, e.g., www.youtube.com, www.google.com/search" aria-label="Sites" required></textarea>
         <div class="inline-time-limit">
@@ -349,7 +383,7 @@
             <span class="toggle-track" aria-hidden="true"></span>
           </label>
           <input name="name" placeholder="Name, e.g., Study resources" aria-label="Name" required>
-          <button class="danger remove-button" type="button" data-remove>Remove</button>
+          <button class="icon-button danger remove-button" type="button" data-remove title="Delete rule" aria-label="Delete rule"><span class="material-symbols-outlined">delete</span></button>
         </div>
         <textarea name="patterns" placeholder="Allowed sites, e.g., docs.google.com, *.coursera.org" aria-label="Allowed sites" required></textarea>
         <fieldset class="weekday-picker">
@@ -379,7 +413,7 @@
             <span class="toggle-track" aria-hidden="true"></span>
           </label>
           <input name="name" placeholder="Name, e.g., YouTube break" aria-label="Name" required>
-          <button class="danger remove-button" type="button" data-remove>Remove</button>
+          <button class="icon-button danger remove-button" type="button" data-remove title="Delete rule" aria-label="Delete rule"><span class="material-symbols-outlined">delete</span></button>
         </div>
         <textarea name="patterns" placeholder="Sites, e.g., *.youtube.com, netflix.com, twitch.tv" aria-label="Sites" required></textarea>
         <div class="split-fields">
